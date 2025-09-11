@@ -1,10 +1,11 @@
 # EMIS XML to SNOMED Translator - Streamlit Version
 
-A web application that translates EMIS XML files (which use an EMIS specific GUID placeholder) to their native SNOMED codes! Perfect for enterprise environments where executables cannot be run.
+A comprehensive web application that translates EMIS XML files (which use an EMIS specific GUID placeholder) to their native SNOMED codes!
+With advanced categorization of clinical codes, medications, refsets, and pseudo-refsets.
 
-## 🚀 Live Demo
+## 🚀 **[Now Live](https://emis-xml-convertor.streamlit.app/)**
 
-**Deploy to Streamlit Cloud**: [streamlit.app](https://share.streamlit.io/)
+**Ready to use immediately - no installation required** Click the link above to access the live application.
 
 ## 🏗️ Local Development
 
@@ -13,7 +14,7 @@ A web application that translates EMIS XML files (which use an EMIS specific GUI
 
 ### Setup
 ```bash
-pip install -r requirements_streamlit.txt
+pip install -r requirements.txt
 streamlit run streamlit_app.py
 ```
 
@@ -39,12 +40,8 @@ streamlit run streamlit_app.py
 
 ## 🌐 Deployment Options
 
-### Option 1: Streamlit Cloud (Recommended)
-1. Push code to GitHub repository
-2. Go to [share.streamlit.io](https://share.streamlit.io/)
-3. Connect your GitHub repo
-4. Deploy with one click
-5. Share the public URL with your team
+### Option 1: Use Live App (Recommended)
+**[🌐 Access Live App](https://emis-xml-convertor.streamlit.app/)** - No installation required
 
 ### Option 2: Streamlit Community Cloud
 1. Fork this repository
@@ -99,4 +96,4 @@ Access via: `http://your-computer-ip:8501`
 4. Export standalone codes and pseudo-refset members as needed
 5. Use appropriate codes based on type (direct codes vs member listings)
 
-Perfect for clinical teams who need a comprehensive, secure, web-based solution!
+**Built for healthcare teams who need accurate and secure EMIS to SNOMED translation** 🏥

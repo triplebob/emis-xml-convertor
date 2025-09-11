@@ -3,6 +3,10 @@
 A comprehensive web application that translates EMIS XML files (which use an EMIS specific GUID placeholder) to their native SNOMED codes!
 With advanced categorization of clinical codes, medications, refsets, and pseudo-refsets.
 
+## 🚀 **[Now Live](https://emis-xml-convertor.streamlit.app/)**
+
+**Ready to use immediately - no installation required** Click the link above to access the live application.
+
 ## ✨ Key Features
 
 - **🧠 Advanced Classification**: Automatically categorizes codes as clinical, medications, refsets, or pseudo-refsets
@@ -15,18 +19,23 @@ With advanced categorization of clinical codes, medications, refsets, and pseudo
 
 ## 🚀 Quick Start
 
-### Prerequisites
+### Option 1: Use Live App (Recommended)
+**[🌐 Access Live App](https://emis-xml-convertor.streamlit.app/)** - No installation required
+
+### Option 2: Run Locally
+
+#### Prerequisites
 - Python 3.8+
 - CSV lookup table with EMIS GUID to SNOMED mappings
 
-### Installation
+#### Installation
 ```bash
-git clone <repository-url>
-cd emis-xml-translator
+git clone https://github.com/triplebob/emis-xml-convertor.git
+cd emis-xml-convertor
 pip install -r requirements.txt
 ```
 
-### Running Locally
+#### Running Locally
 ```bash
 streamlit run streamlit_app.py
 ```
@@ -105,8 +114,14 @@ Even with `SNOMED_CONCEPT`, codes are classified as medications when in medicati
 ## 📁 File Structure
 
 ```
-emis-xml-translator/
+emis-xml-convertor/
 ├── streamlit_app.py           # Main Streamlit application
+├── status_bar.py              # Sidebar status and lookup table display
+├── data_loader.py             # Lookup table loading and statistics
+├── xml_parser.py              # XML parsing and EMIS GUID extraction
+├── translator.py              # GUID to SNOMED translation logic
+├── ui_tabs.py                 # Results tabs and UI components
+├── github_loader.py           # GitHub data source integration
 ├── requirements.txt           # Python dependencies
 ├── README.md                 # This documentation
 └── README_STREAMLIT.md       # Streamlit-specific guide
@@ -154,4 +169,4 @@ emis-xml-translator/
 
 ---
 
-**Built for healthcare teams who need reliable, secure EMIS to SNOMED translation** 🏥
+**Built for healthcare teams who need accurate and secure EMIS to SNOMED translation** 🏥
