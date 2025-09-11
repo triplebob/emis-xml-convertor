@@ -6,6 +6,7 @@ Handles authentication, token validation, and secure loading of lookup tables.
 import requests
 import pandas as pd
 import io
+import json
 from datetime import datetime
 from typing import Optional, Tuple
 
@@ -120,12 +121,13 @@ class GitHubLookupLoader:
         else:
             return 'csv'
     
-    def load_lookup_table(self) -> Tuple[pd.DataFrame, str, str]:
+    def load_lookup_table(self) -> Tuple[pd.DataFrame, str, str, dict]:
         """
         Load the lookup table from GitHub with automatic format detection.
+        Also loads version information if available.
         
         Returns:
-            Tuple[pd.DataFrame, str, str]: (dataframe, emis_guid_column, snomed_code_column)
+            Tuple[pd.DataFrame, str, str, dict]: (dataframe, emis_guid_column, snomed_code_column, version_info)
             
         Raises:
             Exception: If loading fails for any reason
@@ -200,7 +202,36 @@ class GitHubLookupLoader:
                 available_cols = list(lookup_df.columns)
                 raise Exception(f"Required columns not found. Available columns: {available_cols}")
             
-            return lookup_df, emis_guid_col, snomed_code_col
+            # Try to load version information
+            version_info = {}
+            try:
+                version_url = self.lookup_url.replace('.parquet', '-version.json').replace('.csv', '-version.json')
+                if 'raw/refs/heads/main' in version_url:
+                    # Convert to API URL
+                    parts = version_url.split('/')
+                    user = parts[3]
+                    repo = parts[4]
+                    filename = parts[-1]
+                    version_api_url = f"https://api.github.com/repos/{user}/{repo}/contents/{filename}"
+                else:
+                    version_api_url = version_url
+                    
+                version_response = requests.get(version_api_url, headers=self.headers, timeout=10)
+                if version_response.status_code == 200:
+                    content_type = version_response.headers.get('content-type', '')
+                    if 'application/vnd.github.v3.raw' in content_type:
+                        version_info = version_response.json()
+                    elif 'application/json' in content_type:
+                        import base64
+                        data = version_response.json()
+                        if 'content' in data:
+                            version_content = base64.b64decode(data['content']).decode('utf-8')
+                            version_info = json.loads(version_content)
+            except:
+                # Version info is optional, continue without it
+                pass
+            
+            return lookup_df, emis_guid_col, snomed_code_col, version_info
             
         except requests.exceptions.RequestException as e:
             raise Exception(f"Failed to download lookup table: {str(e)}")

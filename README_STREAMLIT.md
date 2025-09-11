@@ -1,6 +1,6 @@
 # EMIS XML to SNOMED Translator - Streamlit Version
 
-A web application that translates EMIS XML files to SNOMED codes using CSV lookup tables. Perfect for enterprise environments where executables cannot be run.
+A web application that translates EMIS XML files (which use an EMIS specific GUID placeholder) to their native SNOMED codes! Perfect for enterprise environments where executables cannot be run.
 
 ## 🚀 Live Demo
 
@@ -19,34 +19,23 @@ streamlit run streamlit_app.py
 
 ## 📋 How to Use
 
-### 1. Prepare Your Lookup Table
-Create a CSV file with your EMIS GUID to SNOMED mappings:
+### 1. Automatic Setup
+- The app automatically loads a fork of the EMIS internal GUID to SNOMED lookup table
+- No manual uploads required - everything is ready to use
+- View lookup table status and key statistics in the sidebar
 
-```csv
-EMIS_GUID,SNOMED_Code,SNOMED_Description
-999010611000230105,49436004,Atrial fibrillation
-999007971000230109,195080001,Atrial fibrillation resolved
-```
+### 2. Upload & Process XML
+- Upload your EMIS XML search definition file
+- Click "Process XML File" to begin translation
+- View real-time processing statistics
 
-**Required columns:**
-- `EMIS_GUID`: The EMIS internal GUID (from XML `<value>` elements)
-- `SNOMED_Code`: The actual SNOMED CT code
-- `SNOMED_Description`: Human-readable SNOMED description
-
-### 2. Use the Application
-
-1. **Upload Lookup Table**: 
-   - Use the sidebar to upload your CSV mapping file
-   - Download the sample CSV template if needed
-
-2. **Upload XML File**:
-   - Upload your EMIS XML search definition file
-   - Click "Process XML File"
-
-3. **View Results**:
-   - See translation statistics and success rate
-   - Browse the results table (color-coded: green = found, red = not found)
-   - Download results as CSV
+### 3. Explore Results by Category
+- **📋 Summary Tab**: Overview statistics and success rates
+- **🏥 Clinical Codes**: Standalone clinical codes (exportable)
+- **💊 Medications**: Standalone medications with type flags (exportable)
+- **📊 Refsets**: True SNOMED refsets
+- **⚠️ Pseudo-Refsets**: Containers that require member code listings
+- **📝 Members**: Individual codes from pseudo-refsets (exportable)
 
 ## 🌐 Deployment Options
 
@@ -74,49 +63,40 @@ Access via: `http://your-computer-ip:8501`
 ### Data Processing
 - **No data stored**: Files are processed in memory only
 - **Session-based**: Results cleared when browser closed
-- **No external calls**: All processing happens locally/in the app
+- **Local processing**: No external API calls or data transmission
+- **Enterprise-friendly**: No executables, runs in standard browser
+- **GDPR compliant**: No persistent storage of clinical data
 
-### Enterprise Considerations
-- No executable files to worry about
-- Runs in standard web browser
-- Can be deployed on internal networks
-- CSV lookup tables can be version controlled
+### Lookup Table
+- **Secure access**: Fork of EMIS internal mappings via private repository
+- **Automatic updates**: Latest mappings loaded with 1-hour cache
+- **No manual uploads**: Eliminates data handling concerns
 
 ## 🎯 Features
 
-- **📁 Dual File Upload**: XML files + CSV lookup tables
-- **🔄 Real-time Processing**: Instant translation results
-- **📊 Statistics Dashboard**: Success rates and counts
-- **🎨 Color-coded Results**: Visual indication of mapping success
-- **📥 CSV Export**: Download results with timestamps
-- **📋 Sample Templates**: Download example CSV format
-- **🔍 Data Preview**: View lookup table before processing
-
-## 📈 Workflow
-
-```mermaid
-graph LR
-    A[Upload CSV Lookup] --> B[Upload EMIS XML]
-    B --> C[Extract EMIS GUIDs]
-    C --> D[Lookup SNOMED Codes]
-    D --> E[Display Results]
-    E --> F[Export CSV]
-```
+- **🧠 Advanced Classification**: Automatically categorizes codes as clinical, medications, refsets, or pseudo-refsets
+- **💊 Medication Type Detection**: Identifies SCT_CONST (Constituent), SCT_DRGGRP (Drug Group), SCT_PREP (Preparation)
+- **⚠️ Pseudo-Refset Handling**: Properly handles pseudo-refsets like ASTTRT_COD with context-aware medication classification
+- **📊 Multi-Tab Interface**: Organized tabs for different code types with appropriate export options
+- **🔍 Context-Aware Processing**: Considers XML table/column context (e.g., MEDICATION_ISSUES + DRUGCODE)
+- **📈 Comprehensive Statistics**: Detailed counts and success rates for all categories
+- **🎨 Color-Coded Results**: Visual indicators for mapping success and code types
 
 ## 🛠️ Technical Details
 
 - **Framework**: Streamlit (pure Python web apps)
-- **Dependencies**: Only `streamlit` and `pandas`
+- **Dependencies**: `streamlit`, `pandas`, `requests`, `pyarrow`
 - **File Processing**: XML parsing with `xml.etree.ElementTree`
-- **Data Handling**: Pandas DataFrames for efficient lookup
+- **Data Handling**: Pandas DataFrames with Parquet optimization
+- **Authentication**: Secure GitHub API access with token management
 - **Deployment**: Cloud-ready, no database required
 
 ## 📝 Example Usage
 
-1. Export your EMIS GUID → SNOMED mappings from Power BI to CSV
-2. Upload the CSV to the Streamlit app
-3. Upload any EMIS XML search file
-4. Get instant translation results
-5. Download as CSV for further analysis
+1. Upload your EMIS XML search definition file
+2. App automatically loads the latest GUID → SNOMED mappings
+3. Get instant categorized translation results
+4. Export standalone codes and pseudo-refset members as needed
+5. Use appropriate codes based on type (direct codes vs member listings)
 
-Perfect for clinical teams who need a simple, secure, web-based solution!
+Perfect for clinical teams who need a comprehensive, secure, web-based solution!

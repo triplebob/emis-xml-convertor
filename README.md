@@ -1,6 +1,7 @@
 # 🏥 EMIS XML to SNOMED Code Translator
 
-A comprehensive web application that translates EMIS XML files to SNOMED codes with advanced categorization of clinical codes, medications, refsets, and pseudo-refsets. Built with Streamlit for easy deployment and enterprise-friendly CSV-based lookup tables.
+A comprehensive web application that translates EMIS XML files (which use an EMIS specific GUID placeholder) to their native SNOMED codes!
+With advanced categorization of clinical codes, medications, refsets, and pseudo-refsets.
 
 ## ✨ Key Features
 
@@ -31,20 +32,14 @@ streamlit run streamlit_app.py
 ```
 Open browser to: `http://localhost:8501`
 
-### Deploy to Streamlit Cloud
-1. Push to GitHub repository  
-2. Go to [share.streamlit.io](https://share.streamlit.io)
-3. Connect your GitHub repo
-4. Deploy with one click
 
-## 📊 Official Lookup Table
+## 📊 Lookup Table
 
-The application uses the official EMIS GUID to SNOMED mapping database, automatically loaded from a private repository. This ensures:
+The application uses a fork of the EMIS internal GUID to SNOMED mapping database, automatically loaded from a private repository. This ensures:
 
 - **Always up-to-date**: Latest mappings are loaded automatically
 - **No manual uploads**: Ready to use immediately  
 - **Comprehensive coverage**: Thousands of pre-mapped clinical codes and medications
-- **Consistent results**: Everyone uses the same authoritative source
 
 The lookup table contains:
 - **Clinical codes**: General SNOMED clinical concepts
@@ -54,9 +49,9 @@ The lookup table contains:
 ## 📖 How to Use
 
 ### 1. Automatic Setup
-- The app automatically loads the official EMIS GUID to SNOMED lookup table
+- The app automatically loads the latest EMIS GUID to SNOMED lookup table
 - No manual uploads required - everything is ready to use
-- View lookup table status and preview in the sidebar
+- View lookup table status and preview key stats in the sidebar
 
 ### 2. Upload & Process XML
 - Upload your EMIS XML search definition file
@@ -96,7 +91,7 @@ The lookup table contains:
 - **SCT_CONST**: SNOMED Constituent substances
 - **SCT_DRGGRP**: SNOMED Drug Groups  
 - **SCT_PREP**: SNOMED Preparations
-- **SNOMED_CONCEPT**: General SNOMED concepts
+- **SNOMED_CONCEPT**: SNOMED clinical code concepts
 
 ### Context-Aware Processing
 The app considers XML structure context:
@@ -122,7 +117,6 @@ emis-xml-translator/
 ### Lookup Table Issues
 - **Loading Errors**: Check internet connection for automatic table loading
 - **Outdated Data**: App automatically loads latest version with 1-hour cache
-- **Access Issues**: Contact administrator if lookup table fails to load
 
 ### Classification Issues
 - **Missing Medications**: Check if pseudo-refset members are in the Members tab
@@ -131,7 +125,7 @@ emis-xml-translator/
 
 ### Performance
 - **Large Files**: Processing 1000+ codes may take 10-30 seconds
-- **Memory**: Very large lookup tables (>100k rows) may impact performance
+- **Memory**: Very large XML files (>1k codes) may impact performance
 
 ## 🔒 Security & Privacy
 

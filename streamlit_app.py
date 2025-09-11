@@ -444,7 +444,7 @@ def load_lookup_table():
         elif "expires soon" in status.lower():
             st.info(f"📅 Token Status: {status}")
         
-        # Load the lookup table
+        # Load the lookup table with version info
         return loader.load_lookup_table()
         
     except KeyError as e:
@@ -465,7 +465,7 @@ def main():
         
         with st.spinner("Loading lookup table..."):
             try:
-                lookup_df, emis_guid_col, snomed_code_col = load_lookup_table()
+                lookup_df, emis_guid_col, snomed_code_col, version_info = load_lookup_table()
                 
                 # Calculate clinical vs medication breakdown
                 if 'Source_Type' in lookup_df.columns:
@@ -480,6 +480,20 @@ def main():
                         st.info(f"📊 Other types: {other_count:,}")
                 else:
                     st.success(f"✅ Lookup table loaded: {len(lookup_df):,} mappings")
+                
+                # Display version information if available
+                if version_info:
+                    st.markdown("---")
+                    st.subheader("📊 Version Information")
+                    
+                    if 'emis_version' in version_info:
+                        st.info(f"🏥 EMIS Version: {version_info['emis_version']}")
+                    
+                    if 'snomed_version' in version_info:
+                        st.info(f"📋 SNOMED Version: {version_info['snomed_version']}")
+                    
+                    if 'extract_date' in version_info:
+                        st.info(f"📅 Extract Date: {version_info['extract_date']}")
                     
                 # Store in session state for later use
                 st.session_state.lookup_df = lookup_df
