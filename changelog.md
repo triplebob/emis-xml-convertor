@@ -2,32 +2,23 @@
 
 ## Latest Updates
 
-### Advanced Modular Architecture Refactoring - COMPLETED
+### Enhanced Analytics Dashboard - ADDED
+- New Analytics tab with comprehensive processing metrics and quality indicators
+- Color-coded performance indicators for quick assessment
+- Export functionality for audit reports (JSON, text, CSV formats)
+- Improved layout with better space utilization
 
-Based on colleague suggestions, completely reorganized codebase into focused, reusable modules:
+### Interface Improvements - UPDATED
+- Reorganized layout with cleaner header design and improved column structure
+- Results section now spans full width for better viewing
+- Toast notifications replace persistent success messages
+- Better typography hierarchy with appropriately sized headings
 
-**New Core Modules:**
-- `gui.py` - Layout and UI components with clean separation of concerns
-- `xml_utils.py` - XML parsing and classification logic 
-- `lookup.py` - Lookup table operations 
-- `audit.py` - Provenance tracking and validation statistics (NEW)
-
-**Support Module Organization:**
-- Created `util_modules/` subdirectory for utility components
-- Moved `github_loader.py`, `status_bar.py`, `ui_tabs.py`, `changelog.py` to `util_modules/`
-- Added `__init__.py` for proper Python package structure
-- Updated all import statements across the codebase
-
-**Benefits:**
-- Cleaner separation between core business logic and UI utilities
-- Improved maintainability and testability
-- Enhanced reusability of individual components
-
-### Duplicate Medication Issue - FIXED
-
-- **Problem**: Same medication appearing in both clinical and medication tabs
-- **Solution**: Added prioritization logic - medications matched from the lookup table as medications will always take priority over clinical classification
-- **Result**: No more duplicates, medications stay in medications tab only
+### Bug Fixes
+- Fixed duplicate medications appearing in multiple tabs
+- Fixed EMIS internal codes being misclassified as medications
+- Fixed status bar version information not displaying
+- Fixed oversized metrics in analytics tab
 
 ### Clinical Codes Enhancement - ADDED
 

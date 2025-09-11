@@ -4,22 +4,24 @@ def render_changelog():
     """Render the changelog in an expandable container."""
     with st.expander("What's New - Recent Updates"):
         st.markdown("""
-        ### Advanced Modular Architecture Refactoring - COMPLETED
+        ### Enhanced Analytics Dashboard - NEW
         
-        Based on colleague suggestions, completely reorganized codebase into focused, reusable modules:
+        - New Analytics tab with processing metrics and quality indicators
+        - Color-coded performance indicators for quick assessment  
+        - Export functionality for audit reports (JSON, text, CSV formats)
         
-        **New Core Modules:**
-        - `gui.py` - Layout and UI components with clean separation of concerns
-        - `xml_utils.py` - XML parsing and classification logic 
-        - `lookup.py` - Lookup table operations 
-        - `audit.py` - Provenance tracking and validation statistics (NEW)
+        ### Interface Improvements
         
-        **Support Module Organization:**
-        - Created `util_modules/` subdirectory for utility components
-        - Moved support modules to organized structure
-        - Updated all import statements across the codebase
+        - Reorganized layout with cleaner design and full-width results
+        - Toast notifications for better user experience
+        - Improved typography and spacing throughout
         
-        **Benefits:** Cleaner separation, improved maintainability, professional code organization
+        ### Bug Fixes
+        
+        - Fixed duplicate medications appearing in multiple tabs
+        - Fixed EMIS internal codes being misclassified as medications
+        - Fixed status bar version information not displaying
+        - Fixed oversized text in analytics displays
         
         ### Duplicate Medication Issue - FIXED
         
