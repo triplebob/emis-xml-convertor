@@ -67,10 +67,10 @@ class GitHubLookupLoader:
     
     def get_expiry_status(self) -> str:
         """
-        Get human-readable token expiry status with appropriate emoji.
+        Get token expiry status.
         
         Returns:
-            str: Status message with emoji indicator
+            str: Status message with indicator
         """
         days = self.days_until_expiry()
         if days < 0:
@@ -205,7 +205,9 @@ class GitHubLookupLoader:
             # Try to load version information
             version_info = {}
             try:
-                version_url = self.lookup_url.replace('.parquet', '-version.json').replace('.csv', '-version.json')
+                # For now, use the known working pattern
+                # TODO: Make this configurable when more lookup files are added
+                version_url = self.lookup_url.replace('emis-complete-lookup.parquet', 'lookup-version.json')
                 if 'raw/refs/heads/main' in version_url:
                     # Convert to API URL
                     parts = version_url.split('/')
@@ -219,14 +221,24 @@ class GitHubLookupLoader:
                 version_response = requests.get(version_api_url, headers=self.headers, timeout=10)
                 if version_response.status_code == 200:
                     content_type = version_response.headers.get('content-type', '')
-                    if 'application/vnd.github.v3.raw' in content_type:
-                        version_info = version_response.json()
-                    elif 'application/json' in content_type:
-                        import base64
-                        data = version_response.json()
-                        if 'content' in data:
-                            version_content = base64.b64decode(data['content']).decode('utf-8')
-                            version_info = json.loads(version_content)
+                    try:
+                        if 'application/json' in content_type:
+                            data = version_response.json()
+                            if isinstance(data, dict) and 'content' in data:
+                                import base64
+                                version_content = base64.b64decode(data['content']).decode('utf-8')
+                                version_info = json.loads(version_content)
+                            else:
+                                # Direct JSON content
+                                version_info = data
+                        elif 'application/vnd.github.v3.raw' in content_type:
+                            # Try to parse raw JSON
+                            version_info = version_response.json()
+                        else:
+                            # Fallback: try to parse as JSON
+                            version_info = json.loads(version_response.text)
+                    except Exception:
+                        pass
             except:
                 # Version info is optional, continue without it
                 pass

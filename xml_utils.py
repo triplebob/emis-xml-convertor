@@ -1,3 +1,8 @@
+"""
+XML utilities for EMIS XML to SNOMED Translator
+Handles XML parsing, GUID extraction, and code system classification
+"""
+
 import xml.etree.ElementTree as ET
 
 def parse_xml_for_emis_guids(xml_content):
@@ -133,11 +138,16 @@ def is_medication_code_system(code_system, table_context=None, column_context=No
     """Check if the code system indicates this is a medication, considering XML context."""
     code_system_upper = code_system.upper() if code_system else ""
     
+    # Exclude internal EMIS system codes - these are never medications
+    if code_system_upper == 'EMISINTERNAL':
+        return False
+    
     # First check explicit medication code systems
     if code_system_upper in ['SCT_CONST', 'SCT_DRGGRP', 'SCT_PREP']:
         return True
     
     # Check for medication context even if codeSystem is SNOMED_CONCEPT
+    # Must be both medication table AND drug column (not status, date, etc.)
     if (table_context and column_context and 
         table_context.upper() in ['MEDICATION_ISSUES', 'MEDICATION_COURSES'] and 
         column_context.upper() == 'DRUGCODE'):
@@ -148,6 +158,10 @@ def is_medication_code_system(code_system, table_context=None, column_context=No
 def is_clinical_code_system(code_system, table_context=None, column_context=None):
     """Check if the code system indicates this is a clinical code, considering XML context."""
     code_system_upper = code_system.upper() if code_system else ""
+    
+    # Exclude internal EMIS system codes - these are never clinical codes
+    if code_system_upper == 'EMISINTERNAL':
+        return False
     
     # If it's a medication context, it's not clinical
     if (table_context and column_context and 

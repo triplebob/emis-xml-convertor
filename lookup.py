@@ -1,5 +1,5 @@
 import streamlit as st
-from github_loader import GitHubLookupLoader
+from util_modules.github_loader import GitHubLookupLoader
 
 @st.cache_data(ttl=3600)  # Cache for 1 hour
 def load_lookup_table():
@@ -70,16 +70,30 @@ def create_lookup_dictionaries(lookup_df, emis_guid_col, snomed_code_col):
             source_type = str(row.get('Source_Type', 'Unknown')).strip()
             
             if code_id and code_id != 'nan' and concept_id and concept_id != 'nan':
+                # Extract additional lookup table information
+                has_qualifier = str(row.get('HasQualifier', 'Unknown')).strip()
+                is_parent = str(row.get('IsParent', 'Unknown')).strip()
+                descendants = str(row.get('Descendants', '0')).strip()
+                code_type = str(row.get('CodeType', 'Unknown')).strip()
+                
                 # For GUID lookup (clinical codes and medications)
                 guid_to_snomed_dict[code_id] = {
                     'snomed_code': concept_id,
-                    'source_type': source_type
+                    'source_type': source_type,
+                    'has_qualifier': has_qualifier,
+                    'is_parent': is_parent,
+                    'descendants': descendants,
+                    'code_type': code_type
                 }
                 
                 # For SNOMED lookup (refsets) - map SNOMED code back to itself with source info
                 snomed_to_info_dict[concept_id] = {
                     'snomed_code': concept_id,
-                    'source_type': source_type
+                    'source_type': source_type,
+                    'has_qualifier': has_qualifier,
+                    'is_parent': is_parent,
+                    'descendants': descendants,
+                    'code_type': code_type
                 }
     
     return guid_to_snomed_dict, snomed_to_info_dict

@@ -115,16 +115,22 @@ Even with `SNOMED_CONCEPT`, codes are classified as medications when in medicati
 
 ```
 emis-xml-convertor/
-├── streamlit_app.py           # Main Streamlit application
-├── status_bar.py              # Sidebar status and lookup table display
-├── data_loader.py             # Lookup table loading and statistics
-├── xml_parser.py              # XML parsing and EMIS GUID extraction
+├── streamlit_app.py           # Main application entry point
+├── gui.py                     # Layout and UI components
+├── xml_utils.py               # XML parsing and classification
+├── lookup.py                  # Lookup table operations
 ├── translator.py              # GUID to SNOMED translation logic
-├── ui_tabs.py                 # Results tabs and UI components
-├── github_loader.py           # GitHub data source integration
+├── audit.py                   # Provenance and validation stats
 ├── requirements.txt           # Python dependencies
-├── README.md                 # This documentation
-└── README_STREAMLIT.md       # Streamlit-specific guide
+├── README.md                  # This documentation
+├── README_STREAMLIT.md        # Streamlit-specific guide
+├── changelog.md               # Version history and updates
+└── util_modules/
+    ├── __init__.py            # Package marker
+    ├── github_loader.py       # GitHub API operations
+    ├── status_bar.py          # Sidebar status display
+    ├── ui_tabs.py             # Results tabs UI
+    └── changelog.py           # Changelog display
 ```
 
 ## 🔧 Troubleshooting

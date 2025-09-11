@@ -1,6 +1,6 @@
 import streamlit as st
 import re
-from data_loader import load_lookup_table, get_lookup_statistics
+from lookup import load_lookup_table, get_lookup_statistics
 
 def render_status_bar():
     """Render the status bar in the sidebar with lookup table information."""
@@ -23,7 +23,7 @@ def render_status_bar():
                     st.info(f"📊 Other types: {stats['other_count']:,}")
                 
                 # Display version information if available
-                if version_info:
+                if version_info and len(version_info) > 0:
                     st.markdown("---")
                     st.subheader("📊 Version Information")
                     
@@ -36,22 +36,25 @@ def render_status_bar():
                         snomed_raw = version_info['snomed_version']
                         
                         # Extract the version number and release info
-                        import re
-                        # Pattern to extract: version number and release info, removing [R]
                         match = re.search(r'(\d{8})\s*\[R\]\s*\(([^)]+)\)', snomed_raw)
                         if match:
                             version_num = match.group(1)
-                            release_info = match.group(2)
-                            formatted_version = f"{version_num} ({release_info})"
-                            st.info(f"📋 SNOMED Clinical Terms Version")
-                            st.info(f"   {formatted_version}")
+                            # Convert version_num (yyyymmdd) to UK format (dd/mm/yyyy)
+                            uk_date = f"{version_num[6:8]}/{version_num[4:6]}/{version_num[0:4]}"
+                            st.info(f"📋 SNOMED Clinical Terms\n\u2003\u2002Version {uk_date}")
                         else:
-                            # Fallback if pattern doesn't match
-                            st.info(f"📋 SNOMED Clinical Terms Version")
-                            st.info(f"   {snomed_raw}")
+                            st.info(f"📋 SNOMED Clinical Terms\n\u2003{snomed_raw}")
                     
                     if 'extract_date' in version_info:
-                        st.info(f"📅 Extract Date: {version_info['extract_date']}")
+                        # Convert extract_date to UK format (dd/mm/yyyy), remove time if present
+                        extract_date_raw = version_info['extract_date']
+                        # Try to extract just the date part (assume format yyyy-mm-dd or yyyy-mm-ddTHH:MM:SS)
+                        date_match = re.match(r'(\d{4})-(\d{2})-(\d{2})', extract_date_raw)
+                        if date_match:
+                            uk_extract_date = f"{date_match.group(3)}/{date_match.group(2)}/{date_match.group(1)}"
+                            st.info(f"📅\u2003Date of Extraction:\n\u2003\u2003\u2002\u2002{uk_extract_date}")
+                        else:
+                            st.info(f"📅 Date of Extraction:\n\u2003\u2003\u2002{extract_date_raw}")
                 
                 # Store in session state for later use
                 st.session_state.lookup_df = lookup_df

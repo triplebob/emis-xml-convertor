@@ -1,8 +1,9 @@
 import streamlit as st
-from status_bar import render_status_bar
-from xml_parser import parse_xml_for_emis_guids
+from util_modules.status_bar import render_status_bar
+from xml_utils import parse_xml_for_emis_guids
 from translator import translate_emis_guids_to_snomed
-from ui_tabs import render_results_tabs
+from util_modules.ui_tabs import render_results_tabs
+from util_modules.changelog import render_changelog
 
 # Page configuration
 st.set_page_config(
@@ -76,6 +77,9 @@ def main():
         
         else:
             st.info("📤 Upload an XML file to begin processing")
+        
+        # Add changelog section
+        render_changelog()
     
     with col2:
         st.header("📊 Results")

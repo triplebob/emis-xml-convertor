@@ -1,5 +1,5 @@
-from xml_parser import is_pseudo_refset, get_medication_type_flag, is_medication_code_system, is_clinical_code_system
-from data_loader import create_lookup_dictionaries
+from xml_utils import is_pseudo_refset, get_medication_type_flag, is_medication_code_system, is_clinical_code_system
+from lookup import create_lookup_dictionaries
 
 def translate_emis_guids_to_snomed(emis_guids, lookup_df, emis_guid_col, snomed_code_col):
     """Translate EMIS GUIDs to SNOMED codes using lookup DataFrame."""
@@ -110,10 +110,18 @@ def translate_emis_guids_to_snomed(emis_guids, lookup_df, emis_guid_col, snomed_
                 mapping = guid_to_snomed_dict[emis_guid]
                 snomed_code = mapping['snomed_code']
                 source_type = mapping['source_type']
+                has_qualifier = mapping.get('has_qualifier', 'Unknown')
+                is_parent = mapping.get('is_parent', 'Unknown')
+                descendants = mapping.get('descendants', '0')
+                code_type = mapping.get('code_type', 'Unknown')
                 mapping_found = True
             else:
                 snomed_code = 'Not Found'
                 source_type = 'Unknown'
+                has_qualifier = 'Unknown'
+                is_parent = 'Unknown'
+                descendants = '0'
+                code_type = 'Unknown'
                 mapping_found = False
             
             # Always use XML display name for description (whether found or not)
@@ -149,15 +157,27 @@ def translate_emis_guids_to_snomed(emis_guids, lookup_df, emis_guid_col, snomed_
                 unique_medication_pseudo[emis_guid] = member_record
             elif is_clinical_code_system(code_system, table_context, column_context):
                 member_record['Include Children'] = 'Yes' if guid_info['include_children'] else 'No'
+                member_record['Has Qualifier'] = has_qualifier
+                member_record['Is Parent'] = is_parent
+                member_record['Descendants'] = descendants
+                member_record['Code Type'] = code_type
                 # Add to unique clinical pseudo dict (deduplicate by emis_guid)
                 unique_clinical_pseudo[emis_guid] = member_record
             else:
+                # Skip EMIS internal codes entirely - they're not medical codes
+                if code_system.upper() == 'EMISINTERNAL':
+                    continue  # Skip this pseudo-refset member entirely
+                
                 # Fall back to lookup table source type for unknown code systems
                 if source_type in ['Medication', 'Constituent', 'DM+D']:
                     member_record['Medication Type'] = 'Standard Medication'
                     unique_medication_pseudo[emis_guid] = member_record
                 else:
                     member_record['Include Children'] = 'Yes' if guid_info['include_children'] else 'No'
+                    member_record['Has Qualifier'] = has_qualifier
+                    member_record['Is Parent'] = is_parent
+                    member_record['Descendants'] = descendants
+                    member_record['Code Type'] = code_type
                     unique_clinical_pseudo[emis_guid] = member_record
             
             continue  # Don't add to standalone codes
@@ -168,10 +188,18 @@ def translate_emis_guids_to_snomed(emis_guids, lookup_df, emis_guid_col, snomed_
                 mapping = guid_to_snomed_dict[emis_guid]
                 snomed_code = mapping['snomed_code']
                 source_type = mapping['source_type']
+                has_qualifier = mapping.get('has_qualifier', 'Unknown')
+                is_parent = mapping.get('is_parent', 'Unknown')
+                descendants = mapping.get('descendants', '0')
+                code_type = mapping.get('code_type', 'Unknown')
                 mapping_found = True
             else:
                 snomed_code = 'Not Found'
                 source_type = 'Unknown'
+                has_qualifier = 'Unknown'
+                is_parent = 'Unknown'
+                descendants = '0'
+                code_type = 'Unknown'
                 mapping_found = False
             
             # Always use XML display name for description (whether found or not)
@@ -187,7 +215,9 @@ def translate_emis_guids_to_snomed(emis_guids, lookup_df, emis_guid_col, snomed_
                 'SNOMED Code': snomed_code,
                 'SNOMED Description': description,
                 'Mapping Found': 'Found' if mapping_found else 'Not Found',
-                'Pseudo-Refset Member': 'No'
+                'Pseudo-Refset Member': 'No',
+                'Table Context': guid_info.get('table_context', 'N/A'),
+                'Column Context': guid_info.get('column_context', 'N/A')
             }
             
             # Classify as clinical or medication based on XML codeSystem and context
@@ -199,19 +229,40 @@ def translate_emis_guids_to_snomed(emis_guids, lookup_df, emis_guid_col, snomed_
             if is_medication_code_system(code_system, table_context, column_context):
                 result['Medication Type'] = get_medication_type_flag(code_system)
                 # Add to unique medications dict (deduplicate by emis_guid)
+                # Always prioritize medication context - remove from clinical if it exists there
+                if emis_guid in unique_clinical_codes:
+                    del unique_clinical_codes[emis_guid]
                 unique_medications[emis_guid] = result
             elif is_clinical_code_system(code_system, table_context, column_context):
                 result['Include Children'] = 'Yes' if guid_info['include_children'] else 'No'
-                # Add to unique clinical codes dict (deduplicate by emis_guid)
-                unique_clinical_codes[emis_guid] = result
+                result['Has Qualifier'] = has_qualifier
+                result['Is Parent'] = is_parent
+                result['Descendants'] = descendants
+                result['Code Type'] = code_type
+                # Only add to clinical if it's not already in medications (medication context takes priority)
+                if emis_guid not in unique_medications:
+                    unique_clinical_codes[emis_guid] = result
             else:
+                # Skip EMIS internal codes entirely - they're not medical codes
+                if code_system.upper() == 'EMISINTERNAL':
+                    continue  # Skip this code entirely
+                
                 # Fall back to lookup table source type for unknown code systems
                 if source_type in ['Medication', 'Constituent', 'DM+D']:
                     result['Medication Type'] = 'Standard Medication'
+                    # Remove from clinical if it exists there
+                    if emis_guid in unique_clinical_codes:
+                        del unique_clinical_codes[emis_guid]
                     unique_medications[emis_guid] = result
                 else:
                     result['Include Children'] = 'Yes' if guid_info['include_children'] else 'No'
-                    unique_clinical_codes[emis_guid] = result
+                    result['Has Qualifier'] = has_qualifier
+                    result['Is Parent'] = is_parent
+                    result['Descendants'] = descendants
+                    result['Code Type'] = code_type
+                    # Only add to clinical if it's not already in medications
+                    if emis_guid not in unique_medications:
+                        unique_clinical_codes[emis_guid] = result
     
     # Convert dictionaries back to lists (now deduplicated)
     clinical_codes = list(unique_clinical_codes.values())
