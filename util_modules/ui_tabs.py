@@ -437,57 +437,42 @@ def render_analytics_tab():
         st.markdown("**Standalone Codes**")
         
         # Clinical codes
-        clinical_rate = trans_accuracy['clinical_codes']['success_rate']
-        clinical_text = f"**Clinical Codes:** {clinical_rate}% ({trans_accuracy['clinical_codes']['found']}/{trans_accuracy['clinical_codes']['total']} found)"
-        if clinical_rate >= 90:
-            st.success(clinical_text)
-        elif clinical_rate >= 70:
-            st.warning(clinical_text)
-        else:
-            st.error(clinical_text)
+        render_success_rate_metric(
+            "Clinical Codes",
+            trans_accuracy['clinical_codes']['found'],
+            trans_accuracy['clinical_codes']['total']
+        )
         
         # Medications
-        med_rate = trans_accuracy['medications']['success_rate']
-        med_text = f"**Medications:** {med_rate}% ({trans_accuracy['medications']['found']}/{trans_accuracy['medications']['total']} found)"
-        if med_rate >= 90:
-            st.success(med_text)
-        elif med_rate >= 70:
-            st.warning(med_text)
-        else:
-            st.error(med_text)
+        render_success_rate_metric(
+            "Medications",
+            trans_accuracy['medications']['found'],
+            trans_accuracy['medications']['total']
+        )
     
     with col2:
         st.markdown("**Pseudo-Refset Members**")
         
         # Clinical members
-        clinical_pseudo_rate = trans_accuracy['pseudo_refset_clinical']['success_rate']
-        clinical_pseudo_text = f"**Clinical Members:** {clinical_pseudo_rate}% ({trans_accuracy['pseudo_refset_clinical']['found']}/{trans_accuracy['pseudo_refset_clinical']['total']} found)"
-        if clinical_pseudo_rate >= 90:
-            st.success(clinical_pseudo_text)
-        elif clinical_pseudo_rate >= 70:
-            st.warning(clinical_pseudo_text)
-        else:
-            st.error(clinical_pseudo_text)
+        render_success_rate_metric(
+            "Clinical Members",
+            trans_accuracy['pseudo_refset_clinical']['found'],
+            trans_accuracy['pseudo_refset_clinical']['total']
+        )
         
         # Medication members
-        med_pseudo_rate = trans_accuracy['pseudo_refset_medications']['success_rate']
-        med_pseudo_text = f"**Medication Members:** {med_pseudo_rate}% ({trans_accuracy['pseudo_refset_medications']['found']}/{trans_accuracy['pseudo_refset_medications']['total']} found)"
-        if med_pseudo_rate >= 90:
-            st.success(med_pseudo_text)
-        elif med_pseudo_rate >= 70:
-            st.warning(med_pseudo_text)
-        else:
-            st.error(med_pseudo_text)
+        render_success_rate_metric(
+            "Medication Members",
+            trans_accuracy['pseudo_refset_medications']['found'],
+            trans_accuracy['pseudo_refset_medications']['total']
+        )
     
     # Overall success rate
-    overall_rate = trans_accuracy['overall']['success_rate']
-    overall_text = f"**Overall Success Rate:** {overall_rate}% ({trans_accuracy['overall']['found']}/{trans_accuracy['overall']['total']} total codes found)"
-    if overall_rate >= 90:
-        st.success(overall_text)
-    elif overall_rate >= 70:
-        st.warning(overall_text)
-    else:
-        st.error(overall_text)
+    render_success_rate_metric(
+        "Overall Success Rate",
+        trans_accuracy['overall']['found'],
+        trans_accuracy['overall']['total']
+    )
     
     # Code System Breakdown and Quality Indicators side by side
     breakdown_col, quality_col = st.columns([1, 2])
