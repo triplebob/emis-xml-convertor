@@ -245,12 +245,30 @@ class GitHubLookupLoader:
             
             return lookup_df, emis_guid_col, snomed_code_col, version_info
             
+        except requests.exceptions.Timeout as e:
+            raise Exception(f"Request timed out while downloading lookup table. Please check your connection and try again: {str(e)}")
+        except requests.exceptions.ConnectionError as e:
+            raise Exception(f"Connection error while accessing GitHub. Please check your network connection: {str(e)}")
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 401:
+                raise Exception("Authentication failed. Please check your GitHub token permissions and ensure it has access to the repository.")
+            elif e.response.status_code == 403:
+                if 'rate limit' in str(e).lower():
+                    raise Exception("GitHub API rate limit exceeded. Please wait and try again, or check your token's rate limit status.")
+                else:
+                    raise Exception("Access forbidden. Please verify your GitHub token has the correct repository permissions.")
+            elif e.response.status_code == 404:
+                raise Exception("Lookup table file not found. Please verify the repository URL and file path are correct.")
+            else:
+                raise Exception(f"GitHub API error (HTTP {e.response.status_code}): {str(e)}")
         except requests.exceptions.RequestException as e:
-            raise Exception(f"Failed to download lookup table: {str(e)}")
+            raise Exception(f"Network error while downloading lookup table: {str(e)}")
         except pd.errors.ParserError as e:
-            raise Exception(f"Failed to parse lookup table: {str(e)}")
+            raise Exception(f"Failed to parse lookup table. The file may be corrupted or in an unexpected format: {str(e)}")
+        except json.JSONDecodeError as e:
+            raise Exception(f"Invalid JSON response from GitHub API. The response may be malformed: {str(e)}")
         except Exception as e:
-            raise Exception(f"Error loading lookup table: {str(e)}")
+            raise Exception(f"Unexpected error loading lookup table: {str(e)}")
     
     def _find_column(self, df: pd.DataFrame, possible_names: list) -> Optional[str]:
         """

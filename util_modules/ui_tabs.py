@@ -3,6 +3,16 @@ import pandas as pd
 import io
 from datetime import datetime
 import json
+from .ui_helpers import (
+    render_section_with_data, 
+    render_metrics_row, 
+    render_success_rate_metric,
+    render_download_button,
+    get_success_highlighting_function,
+    get_warning_highlighting_function,
+    create_expandable_sections,
+    render_info_section
+)
 
 def render_summary_tab(results):
     """Render the summary tab with statistics."""
@@ -71,39 +81,16 @@ def render_summary_tab(results):
         st.warning(f"⚠️ Pseudo-refsets found: {pseudo_refset_count} - These cannot be referenced directly in EMIS by SNOMED code")
 
 def render_clinical_codes_tab(results):
-    
     # Standalone clinical codes section
-    st.subheader("📋 Standalone Clinical Codes")
-    st.info("These are clinical codes that are NOT part of any pseudo-refset and can be used directly.")
-    
-    if results['clinical']:
-        clinical_df = pd.DataFrame(results['clinical'])
-        
-        # Color code based on mapping success
-        def highlight_clinical(row):
-            if row['Mapping Found'] == 'Found':
-                return ['background-color: #d4edda'] * len(row)  # Light green
-            else:
-                return ['background-color: #f8d7da'] * len(row)  # Light red
-        
-        styled_clinical = clinical_df.style.apply(highlight_clinical, axis=1)
-        st.dataframe(styled_clinical, use_container_width=True)
-        
-        # Download standalone clinical codes only
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f"standalone_clinical_codes_{st.session_state.xml_filename}_{timestamp}.csv"
-        
-        csv_buffer = io.StringIO()
-        clinical_df.to_csv(csv_buffer, index=False)
-        
-        st.download_button(
-            label="📥 Download Standalone Clinical Codes CSV",
-            data=csv_buffer.getvalue(),
-            file_name=filename,
-            mime="text/csv"
-        )
-    else:
-        st.info("No standalone clinical codes found in this XML file")
+    render_section_with_data(
+        title="📋 Standalone Clinical Codes",
+        data=results['clinical'],
+        info_text="These are clinical codes that are NOT part of any pseudo-refset and can be used directly.",
+        empty_message="No standalone clinical codes found in this XML file",
+        download_label="📥 Download Standalone Clinical Codes CSV",
+        filename_prefix="standalone_clinical_codes",
+        highlighting_function=get_success_highlighting_function()
+    )
     
     # Pseudo-refset member clinical codes section
     st.subheader("⚠️ Clinical Codes in Pseudo-Refsets")
@@ -120,49 +107,40 @@ def render_clinical_codes_tab(results):
                 return ['background-color: #f8cecc'] * len(row)  # Light red/orange
         
         styled_pseudo_clinical = clinical_pseudo_df.style.apply(highlight_pseudo_clinical, axis=1)
-        st.dataframe(styled_pseudo_clinical, use_container_width=True)
+        st.dataframe(styled_pseudo_clinical, width='stretch')
     else:
         st.success("✅ No clinical codes found in pseudo-refsets")
 
 def render_medications_tab(results):
-    
     # Standalone medications section
-    st.subheader("💊 Standalone Medications")
-    st.info("These are medications that are NOT part of any pseudo-refset and can be used directly.")
-    
-    if results['medications']:
-        medications_df = pd.DataFrame(results['medications'])
-        
-        # Color code based on mapping success
-        def highlight_medications(row):
-            if row['Mapping Found'] == 'Found':
-                return ['background-color: #d4edda'] * len(row)  # Light green
-            else:
-                return ['background-color: #f8d7da'] * len(row)  # Light red
-        
-        styled_medications = medications_df.style.apply(highlight_medications, axis=1)
-        st.dataframe(styled_medications, use_container_width=True)
-        
-        # Download standalone medications only
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f"standalone_medications_{st.session_state.xml_filename}_{timestamp}.csv"
-        
-        csv_buffer = io.StringIO()
-        medications_df.to_csv(csv_buffer, index=False)
-        
-        st.download_button(
-            label="📥 Download Standalone Medications CSV",
-            data=csv_buffer.getvalue(),
-            file_name=filename,
-            mime="text/csv"
-        )
-    else:
-        st.info("No standalone medications found in this XML file")
+    render_section_with_data(
+        title="💊 Standalone Medications",
+        data=results['medications'],
+        info_text="These are medications that are NOT part of any pseudo-refset and can be used directly.",
+        empty_message="No standalone medications found in this XML file",
+        download_label="📥 Download Standalone Medications CSV",
+        filename_prefix="standalone_medications",
+        highlighting_function=get_success_highlighting_function()
+    )
     
     # Pseudo-refset member medications section  
-    st.subheader("⚠️ Medications in Pseudo-Refsets")
-    st.warning("These medications are part of pseudo-refsets (refsets EMIS does not natively support yet), and can only be used by listing all member codes. Export these from the 'Pseudo-Refset Members' tab.")
-    st.info("**Medication Type Flags:** SCT_CONST (Constituent), SCT_DRGGRP (Drug Group), SCT_PREP (Preparation)")
+    render_info_section(
+        title="⚠️ Medications in Pseudo-Refsets",
+        content="These medications are part of pseudo-refsets (refsets EMIS does not natively support yet), and can only be used by listing all member codes. Export these from the 'Pseudo-Refset Members' tab.",
+        section_type="warning"
+    )
+    
+    # Add helpful tooltip information
+    with st.expander("ℹ️ Medication Type Flags Help"):
+        st.markdown("""
+        **Medication Type Flags:**
+        - **SCT_CONST** (Constituent): Active ingredients or components
+        - **SCT_DRGGRP** (Drug Group): Groups of related medications  
+        - **SCT_PREP** (Preparation): Specific medication preparations
+        - **Standard Medication**: General medication codes from lookup table
+        """)
+    
+    st.info("**Tip:** Use the Analytics tab to view detailed mapping statistics and quality metrics.")
     
     if results.get('medication_pseudo_members'):
         medication_pseudo_df = pd.DataFrame(results['medication_pseudo_members'])
@@ -175,7 +153,7 @@ def render_medications_tab(results):
                 return ['background-color: #f8cecc'] * len(row)  # Light red/orange
         
         styled_pseudo_medications = medication_pseudo_df.style.apply(highlight_pseudo_medications, axis=1)
-        st.dataframe(styled_pseudo_medications, use_container_width=True)
+        st.dataframe(styled_pseudo_medications, width='stretch')
     else:
         st.success("✅ No medications found in pseudo-refsets")
 
@@ -188,7 +166,7 @@ def render_refsets_tab(results):
             return ['background-color: #d4edda'] * len(row)  # Light green
         
         styled_refsets = refsets_df.style.apply(highlight_refsets, axis=1)
-        st.dataframe(styled_refsets, use_container_width=True)
+        st.dataframe(styled_refsets, width='stretch')
         
         # Download refsets
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -207,14 +185,39 @@ def render_refsets_tab(results):
         st.info("No refsets found in this XML file")
 
 def render_pseudo_refsets_tab(results):
-    st.subheader("⚠️ Pseudo-Refset Containers")
-    st.info("""
-    **What are Pseudo-Refsets?**
-    - These are valueSet containers that hold multiple clinical codes but are NOT stored in the EMIS database as referenceable refsets
-    - They can only be used by manually listing all their member codes - you cannot reference them directly by their native SNOMED code as EMIS does not natively support them yet 
-    - Common examples: valuesets with '_COD' suffix like 'ASTTRT_COD'
-    - See the 'Pseudo-Refset Members' tab to view all codes within each pseudo-refset
-    """)
+    render_info_section(
+        title="⚠️ Pseudo-Refset Containers",
+        content="",  # We'll use expandable help section instead
+        section_type="info"
+    )
+    
+    # Add comprehensive help section
+    with st.expander("ℹ️ Understanding Pseudo-Refsets - Click to expand"):
+        st.markdown("""
+        ### What are Pseudo-Refsets?
+        
+        **Definition:**
+        - ValueSet containers that hold multiple clinical codes
+        - **NOT** stored in the EMIS database as referenceable refsets
+        - Cannot be referenced directly by their SNOMED code in EMIS clinical searches
+        
+        **Usage Limitations:**
+        - Can only be used by manually listing ALL member codes
+        - You cannot reference them directly by their container SNOMED code
+        - EMIS does not natively support these as queryable refsets yet
+        
+        **Common Patterns:**
+        - ValueSets with '_COD' suffix (e.g., 'ASTTRT_COD')
+        - Complex clinical groupings that don't map to standard SNOMED refsets
+        - Legacy EMIS value sets that predate current refset standards
+        
+        **How to Use:**
+        1. Export the pseudo-refset members from the 'Pseudo-Refset Members' tab
+        2. Use the individual member codes directly in your EMIS searches
+        3. Consider creating custom EMIS searches with the member codes
+        """)
+    
+    st.info("💡 **Pro Tip:** See the 'Pseudo-Refset Members' tab to view and export all codes within each pseudo-refset.")
     
     if results.get('pseudo_refsets'):
         pseudo_refsets_df = pd.DataFrame(results['pseudo_refsets'])
@@ -224,7 +227,7 @@ def render_pseudo_refsets_tab(results):
             return ['background-color: #fff3cd'] * len(row)  # Light orange/yellow
         
         styled_pseudo_refsets = pseudo_refsets_df.style.apply(highlight_pseudo_refsets, axis=1)
-        st.dataframe(styled_pseudo_refsets, use_container_width=True)
+        st.dataframe(styled_pseudo_refsets, width='stretch')
         
         # Download pseudo-refsets
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -274,7 +277,7 @@ def render_pseudo_refset_members_tab(results):
                                 return ['background-color: #f8d7da'] * len(row)  # Light red
                         
                         styled_members = members_df.style.apply(highlight_members, axis=1)
-                        st.dataframe(styled_members, use_container_width=True)
+                        st.dataframe(styled_members, width='stretch')
                         
                         # Individual download for this pseudo-refset's members
                         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -494,7 +497,7 @@ def render_analytics_tab():
         code_systems_df = pd.DataFrame(list(audit_stats['code_systems'].items()), 
                                       columns=['Code System', 'Count'])
         code_systems_df = code_systems_df.sort_values('Count', ascending=False)
-        st.dataframe(code_systems_df, use_container_width=True)
+        st.dataframe(code_systems_df, width='stretch')
     
     with quality_col:
         st.write("### ✅ Quality Indicators")

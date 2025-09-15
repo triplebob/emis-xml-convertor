@@ -12,7 +12,7 @@ With advanced categorization of clinical codes, medications, refsets, and pseudo
 - **🧠 Advanced Classification**: Automatically categorizes codes as clinical, medications, refsets, or pseudo-refsets
 - **💊 Medication Type Detection**: Identifies SCT_CONST (Constituent), SCT_DRGGRP (Drug Group), SCT_PREP (Preparation)
 - **⚠️ Pseudo-Refset Handling**: Properly handles pseudo-refsets like ASTTRT_COD with context-aware medication classification
-- **📊 Multi-Tab Interface**: Organized tabs for different code types with appropriate export options
+- **📊 Multi-Tab Interface**: Organized tabs for different code types with filtered export options (All/Matched/Unmatched)
 - **🔍 Context-Aware Processing**: Considers XML table/column context (e.g., MEDICATION_ISSUES + DRUGCODE)
 - **📈 Comprehensive Statistics**: Detailed counts and success rates for all categories
 - **🎨 Color-Coded Results**: Visual indicators for mapping success and code types

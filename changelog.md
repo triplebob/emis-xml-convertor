@@ -2,6 +2,26 @@
 
 ## Latest Updates
 
+### Export Filtering & UI Improvements - ADDED
+
+**Enhanced Export Options:**
+- **Export Filtering**: Clinical Codes and Medications tabs now include radio buttons to export:
+  - All Codes (everything)
+  - Only Matched (codes that found SNOMED mappings)
+  - Only Unmatched (codes that failed to find mappings)
+- **Live Export Count**: Shows "📊 X of Y items selected for export" with real-time feedback
+- **Smart Filenames**: Downloads get descriptive names (e.g., `clinical_codes_matched_20241212.csv`)
+
+**User Interface Enhancements:**
+- **Cancel Processing**: Added cancel button that replaces process button during execution
+- **Collapsible Sidebar**: Performance Settings and Version Info are now collapsible for cleaner interface
+- **Dynamic Help Text**: Processing strategy help text updates based on selection
+- **Improved File Notifications**: File size information now appears as toast notifications instead of full-width bars
+
+**User Benefit:** Users can now export exactly the data they need and have better control over long-running processes with a cleaner, more organized interface.
+
+---
+
 ### Enhanced Analytics Dashboard - ADDED
 - New Analytics tab with comprehensive processing metrics and quality indicators
 - Color-coded performance indicators for quick assessment

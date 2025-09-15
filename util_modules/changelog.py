@@ -4,13 +4,31 @@ def render_changelog():
     """Render the changelog in an expandable container."""
     with st.expander("What's New - Recent Updates"):
         st.markdown("""
-        ### Enhanced Analytics Dashboard - NEW
+        ### Export Filtering & UI Improvements - NEW
+        
+        **Enhanced Export Options:**
+        - **Export Filtering**: Clinical Codes and Medications tabs now include options to export:
+          - All Codes (everything)
+          - Only Matched (codes that found SNOMED mappings)  
+          - Only Unmatched (codes that failed to find mappings)
+        - **Live Export Count**: Shows real-time count of items selected for export
+        - **Smart Filenames**: Downloads get descriptive names (e.g., `clinical_codes_matched.csv`)
+        
+        **User Interface Enhancements:**
+        - **Cancel Processing**: Added cancel button during long-running processes
+        - **Collapsible Sidebar**: Performance Settings and Version Info now collapsible
+        - **Toast Notifications**: File size info now appears as subtle notifications
+        - **Dynamic Help Text**: Processing strategy help updates based on selection
+        
+        ---
+        
+        ### Enhanced Analytics Dashboard
         
         - New Analytics tab with processing metrics and quality indicators
         - Color-coded performance indicators for quick assessment  
         - Export functionality for audit reports (JSON, text, CSV formats)
         
-        ### Interface Improvements
+        ### Previous Interface Improvements
         
         - Reorganized layout with cleaner design and full-width results
         - Toast notifications for better user experience
