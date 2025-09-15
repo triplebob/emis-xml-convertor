@@ -78,6 +78,14 @@ def main():
             # Show process button or cancel button based on state
             if not st.session_state.is_processing:
                 if st.button("🔄 Process XML File", type="primary"):
+                    # Clear previous results
+                    if 'results' in st.session_state:
+                        del st.session_state.results
+                    if 'xml_filename' in st.session_state:
+                        del st.session_state.xml_filename
+                    if 'audit_stats' in st.session_state:
+                        del st.session_state.audit_stats
+                    
                     st.session_state.is_processing = True
                     st.rerun()
             else:
@@ -106,10 +114,10 @@ def main():
                         process = psutil.Process(os.getpid())
                         memory_start = process.memory_info().rss / 1024 / 1024  # MB
                         
-                        # Show progress if enabled
+                        # Initialize progress tracking
+                        progress_bar = None
                         if perf_settings.get('show_progress', True):
-                            progress_bar = st.progress(0)
-                            progress_bar.progress(10)
+                            progress_bar = st.progress(0, text="Starting XML processing...")
                         
                         # Log processing start
                         if debug_logger:
@@ -117,10 +125,13 @@ def main():
                             debug_logger.log_user_action("process_xml_file", {"filename": uploaded_xml.name})
                         
                         # Parse XML with memory optimization
+                        if progress_bar:
+                            progress_bar.progress(5, text="Parsing XML structure...")
+                        
                         emis_guids = parse_xml_for_emis_guids(xml_content)
                         
-                        if perf_settings.get('show_progress', True):
-                            progress_bar.progress(40)
+                        if progress_bar:
+                            progress_bar.progress(25, text=f"Found {len(emis_guids)} GUIDs, preparing translation...")
                         
                         # Show progress as toast notification
                         st.toast(f"🔍 Found {len(emis_guids)} GUIDs, translating to SNOMED...", icon="🔍")
@@ -135,7 +146,10 @@ def main():
                             st.error("No EMIS GUIDs found in the XML file")
                             return
                         
-                        # Translate to SNOMED codes
+                        # Translate to SNOMED codes with progress tracking
+                        if progress_bar:
+                            progress_bar.progress(30, text="Translating GUIDs to SNOMED codes...")
+                        
                         translated_codes = translate_emis_guids_to_snomed(
                             emis_guids, 
                             lookup_df, 
@@ -143,8 +157,8 @@ def main():
                             snomed_code_column
                         )
                         
-                        if perf_settings.get('show_progress', True):
-                            progress_bar.progress(80)
+                        if progress_bar:
+                            progress_bar.progress(75, text="Translation complete, generating statistics...")
                         
                         # Show progress as toast notification
                         st.toast("📊 Creating audit statistics...", icon="📊")
@@ -159,6 +173,9 @@ def main():
                         memory_peak = max(memory_start, memory_end)
                         
                         # Create audit statistics
+                        if progress_bar:
+                            progress_bar.progress(85, text="Creating audit statistics...")
+                        
                         audit_stats = create_processing_stats(
                             uploaded_xml.name,
                             xml_content,
@@ -167,8 +184,8 @@ def main():
                             processing_time
                         )
                         
-                        if perf_settings.get('show_progress', True):
-                            progress_bar.progress(100)
+                        if progress_bar:
+                            progress_bar.progress(95, text="Finalizing results...")
                         
                         # Store results in session state
                         st.session_state.results = translated_codes
@@ -185,8 +202,13 @@ def main():
                         if debug_logger:
                             debug_logger.log_processing_complete(processing_time, success_rate)
                         
-                        # Clear progress indicators
-                        if perf_settings.get('show_progress', True):
+                        # Complete progress
+                        if progress_bar:
+                            progress_bar.progress(100, text="Processing complete!")
+                            
+                        # Clear progress indicators after a brief moment
+                        if progress_bar:
+                            time.sleep(0.5)  # Brief pause to show completion
                             progress_bar.empty()
                         
                         # Show success with toast notification

@@ -380,9 +380,9 @@ def render_analytics_tab():
     
     with col2:
         processing_time = audit_stats['xml_stats']['processing_time_seconds']
-        if processing_time > 60:
+        if processing_time > 120:
             st.error(f"**Processing Time:** {processing_time:.2f}s")
-        elif processing_time > 30:
+        elif processing_time > 60:
             st.warning(f"**Processing Time:** {processing_time:.2f}s")
         else:
             st.success(f"**Processing Time:** {processing_time:.2f}s")

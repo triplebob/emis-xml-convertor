@@ -15,7 +15,7 @@ def render_status_bar():
                 stats = get_lookup_statistics(lookup_df)
                 
                 st.success(f"✅ Lookup table loaded: {stats['total_count']:,} total mappings")
-                st.info(f"🏥 Clinical Codes: {stats['clinical_count']:,}")
+                st.info(f"🏥 SCT Codes: {stats['clinical_count']:,}")
                 st.info(f"💊 Medications: {stats['medication_count']:,}")
                 
                 if stats['other_count'] > 0:

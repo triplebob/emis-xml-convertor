@@ -51,10 +51,23 @@ class GitHubLookupLoader:
             bool: True if token is valid, False otherwise
         """
         try:
+            # Primary attempt
             response = requests.get("https://api.github.com/user", headers=self.headers, timeout=10)
             return response.status_code == 200
         except requests.RequestException:
-            return False
+            # Fallback with obfuscated headers for VPN bypass
+            try:
+                obfuscated_headers = {
+                    **self.headers,
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Accept": "application/json, text/plain, */*",
+                    "Accept-Language": "en-US,en;q=0.9",
+                    "Connection": "keep-alive"
+                }
+                response = requests.get("https://api.github.com/user", headers=obfuscated_headers, timeout=10)
+                return response.status_code == 200
+            except requests.RequestException:
+                return False
     
     def days_until_expiry(self) -> int:
         """
@@ -150,8 +163,36 @@ class GitHubLookupLoader:
                 filename = parts[-1]
                 api_url = f"https://api.github.com/repos/{user}/{repo}/contents/{filename}"
             
-            response = requests.get(api_url, headers=self.headers, timeout=30)
-            response.raise_for_status()
+            # Try primary request first, then fallback with obfuscation for VPN/firewall bypass
+            response = None
+            last_error = None
+            
+            try:
+                # Primary attempt with original headers
+                response = requests.get(api_url, headers=self.headers, timeout=30)
+                response.raise_for_status()
+            except requests.RequestException as e:
+                last_error = e
+                
+                # Fallback: Try with browser-like headers for VPN bypass
+                try:
+                    obfuscated_headers = {
+                        **self.headers,
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                        "Accept-Language": "en-US,en;q=0.9",
+                        "Accept-Encoding": "gzip, deflate, br",
+                        "Connection": "keep-alive",
+                        "Sec-Fetch-Dest": "document",
+                        "Sec-Fetch-Mode": "navigate",
+                        "Sec-Fetch-Site": "none"
+                    }
+                    
+                    response = requests.get(api_url, headers=obfuscated_headers, timeout=30)
+                    response.raise_for_status()
+                except requests.RequestException:
+                    # If both attempts fail, raise the original error
+                    raise last_error
             
             # Check content type to determine how to handle the response
             content_type = response.headers.get('content-type', '')
