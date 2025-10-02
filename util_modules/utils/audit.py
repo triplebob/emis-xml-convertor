@@ -1,5 +1,5 @@
 """
-Audit and validation module for EMIS XML to SNOMED Translator
+Audit and validation module for The Unofficial EMIS XML Toolkit
 Tracks provenance, validation stats, and processing metrics
 """
 
@@ -128,12 +128,71 @@ def create_validation_report(audit_stats):
     report_lines.append(f"Unique EMIS GUIDs: {structure['unique_emis_guids']}")
     report_lines.append(f"Total GUID References: {structure['total_guid_occurrences']}")
     report_lines.append(f"Duplication Rate: {structure['duplicate_guid_ratio']}%")
+    
+    # Add enhanced structure metrics (need to import streamlit for session state access)
+    try:
+        import streamlit as st
+        
+        # Add search/report/folder counts
+        search_results = st.session_state.get('search_results')
+        search_count = len(search_results.searches) if search_results and hasattr(search_results, 'searches') else 0
+        report_lines.append(f"Clinical Searches Found: {search_count}")
+        
+        report_results = st.session_state.get('report_results')
+        if report_results and hasattr(report_results, 'report_breakdown'):
+            total_reports = sum(len(reports) for reports in report_results.report_breakdown.values())
+            report_lines.append(f"Reports Found: {total_reports}")
+            
+            # Add breakdown by report type
+            breakdown_parts = []
+            for report_type, reports in report_results.report_breakdown.items():
+                if reports:
+                    count = len(reports)
+                    breakdown_parts.append(f"{count} {report_type}")
+            if breakdown_parts:
+                report_lines.append(f"  Report Types: {', '.join(breakdown_parts)}")
+        else:
+            report_lines.append(f"Reports Found: 0")
+        
+        analysis = st.session_state.get('search_analysis')
+        folder_count = len(analysis.folders) if analysis and hasattr(analysis, 'folders') else 0
+        report_lines.append(f"Folders Found: {folder_count}")
+        
+    except (ImportError, AttributeError):
+        # Fallback if streamlit not available or session state missing
+        pass
+    
     report_lines.append("")
     
     report_lines.append("TRANSLATION ACCURACY")
     report_lines.append("-" * 20)
     trans = audit_stats['translation_accuracy']
-    report_lines.append(f"Clinical Codes: {trans['clinical_codes']['found']}/{trans['clinical_codes']['total']} ({trans['clinical_codes']['success_rate']}%)")
+    
+    # Add enhanced translation breakdown
+    try:
+        import streamlit as st
+        report_results = st.session_state.get('report_results')
+        report_clinical_count = 0
+        if report_results and hasattr(report_results, 'clinical_codes'):
+            report_clinical_count = len(report_results.clinical_codes)
+        
+        search_found = trans['clinical_codes']['found']
+        search_total = trans['clinical_codes']['total']
+        total_clinical = search_total + report_clinical_count
+        total_found = search_found + report_clinical_count
+        
+        # Show breakdown
+        report_lines.append(f"Search Clinical Codes: {search_found}/{search_total} ({trans['clinical_codes']['success_rate']}%)")
+        if report_clinical_count > 0:
+            report_lines.append(f"Report Clinical Codes: {report_clinical_count}/{report_clinical_count} (100.0%)")
+            report_lines.append(f"Combined Clinical Codes: {total_found}/{total_clinical} ({(total_found/total_clinical*100):.1f}%)")
+        else:
+            report_lines.append(f"Report Clinical Codes: 0/0 (0%)")
+            
+    except (ImportError, AttributeError):
+        # Fallback to original format
+        report_lines.append(f"Clinical Codes: {trans['clinical_codes']['found']}/{trans['clinical_codes']['total']} ({trans['clinical_codes']['success_rate']}%)")
+    
     report_lines.append(f"Medications: {trans['medications']['found']}/{trans['medications']['total']} ({trans['medications']['success_rate']}%)")
     report_lines.append(f"Pseudo-Refset Clinical: {trans['pseudo_refset_clinical']['found']}/{trans['pseudo_refset_clinical']['total']} ({trans['pseudo_refset_clinical']['success_rate']}%)")
     report_lines.append(f"Pseudo-Refset Medications: {trans['pseudo_refset_medications']['found']}/{trans['pseudo_refset_medications']['total']} ({trans['pseudo_refset_medications']['success_rate']}%)")
@@ -149,7 +208,31 @@ def create_validation_report(audit_stats):
     report_lines.append("CATEGORY DISTRIBUTION")
     report_lines.append("-" * 20)
     dist = audit_stats['category_distribution']
-    report_lines.append(f"Clinical Codes: {dist['clinical_codes']}")
+    
+    # Add enhanced category distribution with combined totals
+    try:
+        import streamlit as st
+        report_results = st.session_state.get('report_results')
+        report_clinical_count = 0
+        if report_results and hasattr(report_results, 'clinical_codes'):
+            report_clinical_count = len(report_results.clinical_codes)
+        
+        search_clinical = dist['clinical_codes']
+        total_clinical = search_clinical + report_clinical_count
+        
+        # Show breakdown
+        report_lines.append(f"Search Clinical Codes: {search_clinical}")
+        if report_clinical_count > 0:
+            report_lines.append(f"Report Clinical Codes: {report_clinical_count}")
+            report_lines.append(f"Total Clinical Codes: {total_clinical}")
+        else:
+            report_lines.append(f"Report Clinical Codes: 0")
+            report_lines.append(f"Total Clinical Codes: {search_clinical}")
+            
+    except (ImportError, AttributeError):
+        # Fallback to original format
+        report_lines.append(f"Clinical Codes: {dist['clinical_codes']}")
+    
     report_lines.append(f"Medications: {dist['medications']}")
     report_lines.append(f"True Refsets: {dist['refsets']}")
     report_lines.append(f"Pseudo-Refsets: {dist['pseudo_refsets']}")

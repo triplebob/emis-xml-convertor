@@ -147,7 +147,7 @@ def run_test_suite(test_module: str) -> tuple[bool, str]:
     Run a specific test module and return results.
     
     Args:
-        test_module: Name of the test module (e.g., 'test_classification')
+        test_module: Name of the test module (e.g., 'test_performance')
         
     Returns:
         Tuple of (success: bool, output: str)
@@ -162,10 +162,7 @@ def run_test_suite(test_module: str) -> tuple[bool, str]:
             sys.path.insert(0, project_root)
         
         # Import the test module
-        if test_module == 'test_classification':
-            from tests.test_classification import TestClassificationLogic
-            suite = unittest.TestLoader().loadTestsFromTestCase(TestClassificationLogic)
-        elif test_module == 'test_performance':
+        if test_module == 'test_performance':
             import tests.test_performance as test_perf
             suite = unittest.TestLoader().loadTestsFromModule(test_perf)
         else:
@@ -270,22 +267,7 @@ def render_debug_controls() -> None:
             st.markdown("---")
             st.markdown("**🧪 Test Runner**")
             
-            # Classification tests on first row
-            if st.button("🔬 Classification Tests"):
-                with st.spinner("Running classification tests..."):
-                    success, output = run_test_suite('test_classification')
-                
-                if success:
-                    st.success("✅ Classification tests passed!")
-                else:
-                    st.error("❌ Classification tests failed!")
-                
-                with st.expander("📄 Classification Test Output"):
-                    st.code(output)
-            
-            st.caption("💡 Validate EMIS GUID classification logic, pseudo-refset detection, and medication/clinical code system identification")
-            
-            # Performance tests on second row
+            # Performance tests
             if st.button("⚡ Performance Tests"):
                 with st.spinner("Running performance tests..."):
                     success, output = run_test_suite('test_performance')

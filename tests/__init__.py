@@ -1,3 +1,3 @@
 """
-Tests package for EMIS XML to SNOMED Code Translator
+Tests package for The Unofficial EMIS XML Toolkit
 """

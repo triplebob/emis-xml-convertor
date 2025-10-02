@@ -2,3 +2,4 @@ streamlit
 pandas>=2.0.0
 requests
 psutil
+openpyxl>=3.0.0

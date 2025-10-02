@@ -49,8 +49,10 @@ def render_download_button(
     
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     
-    if xml_filename:
-        filename = f"{filename_prefix}_{xml_filename}_{timestamp}.csv"
+    if xml_filename and xml_filename.strip():
+        # Clean filename for filesystem compatibility
+        clean_xml_filename = xml_filename.replace(' ', '_').replace('.xml', '')
+        filename = f"{filename_prefix}_{clean_xml_filename}_{timestamp}.csv"
     else:
         filename = f"{filename_prefix}_{timestamp}.csv"
     
@@ -98,6 +100,7 @@ def get_warning_highlighting_function():
     return highlight_warning
 
 
+
 def render_section_with_data(
     title: str,
     data: List[Dict],
@@ -121,7 +124,8 @@ def render_section_with_data(
         highlighting_function: Optional function to highlight rows
         additional_processing: Optional function for additional data processing
     """
-    st.subheader(title)
+    if title and title.strip():  # Only show subheader if title is provided and not empty
+        st.subheader(title)
     if info_text:
         st.info(info_text)
     
@@ -132,27 +136,73 @@ def render_section_with_data(
         if additional_processing:
             df = additional_processing(df)
         
+        # Create display version with emojis for UI
+        display_df = df.copy()
+        
+        # Hide source columns in unique_codes mode for display only (keep data for export)
+        current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
+        if current_mode == 'unique_codes':
+            # Remove source columns from display but keep original df with all columns for export
+            columns_to_hide = ['Source', 'Source Type', 'Source GUID']
+            for col in columns_to_hide:
+                if col in display_df.columns:
+                    display_df = display_df.drop(columns=[col])
+        
+        # Add emojis to specific columns for better UI display (without affecting CSV export)
+        if 'EMIS GUID' in display_df.columns:
+            display_df['EMIS GUID'] = '🔍 ' + display_df['EMIS GUID'].astype(str)
+        if 'SNOMED Code' in display_df.columns:
+            display_df['SNOMED Code'] = '🩺 ' + display_df['SNOMED Code'].astype(str)
+        if 'Source' in display_df.columns:
+            # Add appropriate emojis based on source type
+            display_df['Source'] = display_df['Source'].apply(lambda x: 
+                f"🔍 {x}" if x == "Search" else
+                f"📊 {x}" if "Aggregate" in str(x) else
+                f"📋 {x}" if "List" in str(x) else
+                f"📈 {x}" if "Audit" in str(x) else
+                f"📊 {x}"
+            )
+        
         # Apply highlighting if provided
         if highlighting_function:
-            styled_df = create_styled_dataframe(df, highlighting_function)
+            styled_df = create_styled_dataframe(display_df, highlighting_function)
             st.dataframe(styled_df, width='stretch')
         else:
-            st.dataframe(df, width='stretch')
+            st.dataframe(display_df, width='stretch')
         
         # Export filtering options and download button
         if 'Mapping Found' in df.columns:
             col1, col2 = st.columns([1, 2])
             
             with col1:
-                export_filter = st.radio(
-                    "Export Filter:",
-                    ["All Codes", "Only Matched", "Only Unmatched"],
-                    key=f"export_filter_{filename_prefix}",
-                    horizontal=True
-                )
+                # Check if we have source tracking to offer source-based filtering
+                # In unique_codes mode, source columns are filtered out but we should still offer source-based exports
+                current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
+                has_source_tracking = 'Source' in df.columns and 'Source Type' in df.columns
+                
+                # Always show source-based export options if we have Source columns or Source GUID in the data
+                # The data now always includes source tracking, even if hidden in unique_codes mode
+                data_has_source_tracking = 'Source GUID' in df.columns or has_source_tracking
+                
+                if data_has_source_tracking:
+                    export_filter = st.radio(
+                        "Export Filter:",
+                        ["All Codes", "Only Matched", "Only Unmatched", "Only Codes from Searches", "Only Codes from Reports"],
+                        key=f"export_filter_{filename_prefix}",
+                        horizontal=False
+                    )
+                else:
+                    export_filter = st.radio(
+                        "Export Filter:",
+                        ["All Codes", "Only Matched", "Only Unmatched"],
+                        key=f"export_filter_{filename_prefix}",
+                        horizontal=True
+                    )
             
             with col2:
-                # Filter data based on selection
+                # Filter data based on selection - need to handle both display mode and export filtering
+                filtered_df = None
+                
                 if export_filter == "Only Matched":
                     filtered_df = df[df['Mapping Found'] == 'Found']
                     export_label = download_label.replace("📥", "📥 ✅")
@@ -161,15 +211,51 @@ def render_section_with_data(
                     filtered_df = df[df['Mapping Found'] != 'Found']
                     export_label = download_label.replace("📥", "📥 ❌")
                     export_suffix = "_unmatched"
+                elif export_filter == "Only Codes from Searches":
+                    # Filter by source - check if Source column is available, otherwise look for source info in data
+                    if 'Source' in df.columns:
+                        filtered_df = df[df['Source'] == 'Search']
+                    else:
+                        # Filter based on original data source tracking
+                        search_codes = []
+                        for item in data:
+                            if item.get('source_type') == 'search':
+                                search_codes.append(item)
+                        filtered_df = pd.DataFrame(search_codes) if search_codes else pd.DataFrame()
+                    export_label = download_label.replace("📥", "📥 🔍")
+                    export_suffix = "_searches"
+                elif export_filter == "Only Codes from Reports":
+                    # Filter by source - check if Source column is available, otherwise look for source info in data
+                    if 'Source' in df.columns:
+                        filtered_df = df[df['Source'].str.contains('Report', na=False)]
+                    else:
+                        # Filter based on original data source tracking
+                        report_codes = []
+                        for item in data:
+                            if item.get('source_type') == 'report':
+                                report_codes.append(item)
+                        filtered_df = pd.DataFrame(report_codes) if report_codes else pd.DataFrame()
+                    export_label = download_label.replace("📥", "📥 📊")
+                    export_suffix = "_reports"
                 else:  # All Codes
                     filtered_df = df
                     export_label = download_label
                     export_suffix = ""
                 
+                # Add deduplication mode to labels and filename
+                mode_suffix = "_unique" if current_mode == 'unique_codes' else "_per_source"
+                if export_suffix:
+                    export_suffix = mode_suffix + export_suffix
+                else:
+                    export_suffix = mode_suffix
+                
+                mode_label = " (Unique)" if current_mode == 'unique_codes' else " (Per Source)"
+                export_label = export_label.replace("📥", f"📥{mode_label}")
+                
                 # Show count of filtered items
                 st.caption(f"📊 {len(filtered_df)} of {len(df)} items selected for export")
                 
-                # Render download button with filtered data
+                # Render download button with filtered data (clean version for export)
                 xml_filename = st.session_state.get('xml_filename')
                 render_download_button(
                     data=filtered_df,
@@ -185,7 +271,8 @@ def render_section_with_data(
                 data=df,
                 label=download_label,
                 filename_prefix=filename_prefix,
-                xml_filename=xml_filename
+                xml_filename=xml_filename,
+                key=f"download_{filename_prefix}_all"
             )
     else:
         st.info(empty_message)
@@ -335,7 +422,8 @@ def render_info_section(
         content: Section content (supports markdown)
         section_type: Type of section (info, warning, success, error)
     """
-    st.subheader(title)
+    if title and title.strip():  # Only show subheader if title is provided and not empty
+        st.subheader(title)
     
     if section_type == "warning":
         st.warning(content)

@@ -1,8 +1,20 @@
 from xml_utils import is_pseudo_refset, get_medication_type_flag, is_medication_code_system, is_clinical_code_system
-from lookup import create_lookup_dictionaries
+from ..utils.lookup import create_lookup_dictionaries
 
-def translate_emis_guids_to_snomed(emis_guids, lookup_df, emis_guid_col, snomed_code_col):
-    """Translate EMIS GUIDs to SNOMED codes using lookup DataFrame."""
+def translate_emis_to_snomed(emis_guids, lookup_df, emis_guid_col, snomed_code_col, deduplication_mode='unique_codes'):
+    """
+    Translate EMIS GUIDs to SNOMED codes using lookup DataFrame.
+    
+    Args:
+        emis_guids: List of EMIS GUID dictionaries from XML parsing
+        lookup_df: DataFrame with EMIS GUID to SNOMED code mappings
+        emis_guid_col: Column name for EMIS GUIDs in lookup_df
+        snomed_code_col: Column name for SNOMED codes in lookup_df
+        deduplication_mode: 'unique_codes' (dedupe by SNOMED code) or 'unique_per_entity' (dedupe by entity+code)
+    
+    Returns:
+        Dict with categorized results based on deduplication mode
+    """
     # Create lookup dictionaries for faster lookups
     guid_to_snomed_dict, snomed_to_info_dict = create_lookup_dictionaries(lookup_df, emis_guid_col, snomed_code_col)
     
@@ -39,14 +51,76 @@ def translate_emis_guids_to_snomed(emis_guids, lookup_df, emis_guid_col, snomed_
     pseudo_refsets = []  # Containers for pseudo-refsets
     pseudo_refset_members = {}  # Members of each pseudo-refset (for detailed view)
     
-    # Track which refsets we've already added to avoid duplicates
-    added_refset_guids = set()
+    # Track which refset SNOMED codes we've already added to avoid duplicates
+    added_refset_snomed_codes = set()
     
     # Track unique codes to avoid duplicates in all categories
-    unique_clinical_codes = {}  # key: emis_guid, value: code_info
-    unique_medications = {}     # key: emis_guid, value: code_info
-    unique_clinical_pseudo = {} # key: emis_guid, value: code_info
-    unique_medication_pseudo = {} # key: emis_guid, value: code_info
+    # Deduplication key depends on mode: emis_guid (unique_codes) or (source_guid, emis_guid) (unique_per_entity)
+    if deduplication_mode == 'unique_codes':
+        # Deduplicate by SNOMED code only - one instance per code across entire XML
+        unique_clinical_codes = {}  # key: emis_guid, value: code_info
+        unique_medications = {}     # key: emis_guid, value: code_info
+        unique_clinical_pseudo = {} # key: emis_guid, value: code_info
+        unique_medication_pseudo = {} # key: emis_guid, value: code_info
+    else:  # unique_per_entity
+        # Deduplicate by (source_guid, emis_guid) - one instance per code per search/report
+        unique_clinical_codes = {}  # key: (source_guid, emis_guid), value: code_info
+        unique_medications = {}     # key: (source_guid, emis_guid), value: code_info
+        unique_clinical_pseudo = {} # key: (source_guid, emis_guid), value: code_info
+        unique_medication_pseudo = {} # key: (source_guid, emis_guid), value: code_info
+    
+    def get_deduplication_key(guid_info):
+        """Get the appropriate deduplication key based on mode"""
+        if deduplication_mode == 'unique_codes':
+            return guid_info['emis_guid']  # Dedupe by SNOMED code only
+        else:  # unique_per_entity
+            source_guid = guid_info.get('source_guid', 'unknown_source')
+            return (source_guid, guid_info['emis_guid'])  # Dedupe by (source, code)
+    
+    def should_replace_entry(existing_entry, new_entry):
+        """Determine if new entry has better details than existing entry (for unique_codes mode only)"""
+        if deduplication_mode != 'unique_codes':
+            return False  # Don't replace in per_entity mode
+        
+        # Priority factors (higher score = better entry):
+        # 1. Has ValueSet Description (not N/A or empty)
+        # 2. Has XML Display Name (not N/A or empty) 
+        # 3. Has Table/Column Context
+        
+        def calculate_completeness_score(entry):
+            score = 0
+            
+            # ValueSet GUID - HIGHEST priority (actual GUID vs N/A)
+            vs_guid = entry.get('ValueSet GUID', 'N/A')
+            if vs_guid and vs_guid != 'N/A' and vs_guid.strip():
+                score += 20  # Highest priority for actual ValueSet GUID
+            
+            # ValueSet Description - high priority
+            vs_desc = entry.get('ValueSet Description', 'N/A')
+            if vs_desc and vs_desc != 'N/A' and vs_desc.strip():
+                score += 10
+            
+            # SNOMED Description (XML display name) - medium priority
+            snomed_desc = entry.get('SNOMED Description', 'N/A')
+            if snomed_desc and snomed_desc != 'N/A' and snomed_desc != 'No display name in XML' and snomed_desc.strip():
+                score += 5
+            
+            # Table Context - lower priority
+            table_ctx = entry.get('Table Context', 'N/A')
+            if table_ctx and table_ctx != 'N/A' and table_ctx.strip():
+                score += 2
+            
+            # Column Context - lowest priority  
+            col_ctx = entry.get('Column Context', 'N/A')
+            if col_ctx and col_ctx != 'N/A' and col_ctx.strip():
+                score += 1
+            
+            return score
+        
+        existing_score = calculate_completeness_score(existing_entry)
+        new_score = calculate_completeness_score(new_entry)
+        
+        return new_score > existing_score
     
     # Create pseudo-refset containers first
     for valueset_guid in pseudo_refset_valuesets:
@@ -77,10 +151,10 @@ def translate_emis_guids_to_snomed(emis_guids, lookup_df, emis_guid_col, snomed_
         
         # For true refsets, the emis_guid IS the SNOMED code
         if is_refset:
-            # Only add this refset if we haven't already added it
-            if valueset_guid not in added_refset_guids:
-                snomed_code = emis_guid
-                
+            snomed_code = emis_guid
+            
+            # Only add this refset if we haven't already added this specific SNOMED code
+            if snomed_code not in added_refset_snomed_codes:
                 # Try to get additional info from lookup table
                 if snomed_code in snomed_to_info_dict:
                     source_info = snomed_to_info_dict[snomed_code]
@@ -99,8 +173,8 @@ def translate_emis_guids_to_snomed(emis_guids, lookup_df, emis_guid_col, snomed_
                     'Usage': 'Can be referenced directly by SNOMED code in EMIS'
                 })
                 
-                # Mark this refset as already added
-                added_refset_guids.add(valueset_guid)
+                # Mark this SNOMED code as already added
+                added_refset_snomed_codes.add(snomed_code)
             continue
         
         # For regular codes, check if they belong to a pseudo-refset
@@ -151,18 +225,33 @@ def translate_emis_guids_to_snomed(emis_guids, lookup_df, emis_guid_col, snomed_
             column_context = guid_info.get('column_context')
             
             # Use XML codeSystem and context as primary indicator of type
+            dedupe_key = get_deduplication_key(guid_info)
             if is_medication_code_system(code_system, table_context, column_context):
                 member_record['Medication Type'] = get_medication_type_flag(code_system)
-                # Add to unique medications pseudo dict (deduplicate by emis_guid)
-                unique_medication_pseudo[emis_guid] = member_record
+                # Add source info for both modes (will be hidden in UI for unique_codes mode)
+                member_record['Source GUID'] = guid_info.get('source_guid', 'Unknown')
+                # Add to unique medications pseudo dict
+                if dedupe_key in unique_medication_pseudo:
+                    # Replace existing entry if new one has better details
+                    if should_replace_entry(unique_medication_pseudo[dedupe_key], member_record):
+                        unique_medication_pseudo[dedupe_key] = member_record
+                else:
+                    unique_medication_pseudo[dedupe_key] = member_record
             elif is_clinical_code_system(code_system, table_context, column_context):
                 member_record['Include Children'] = 'Yes' if guid_info['include_children'] else 'No'
                 member_record['Has Qualifier'] = has_qualifier
                 member_record['Is Parent'] = is_parent
                 member_record['Descendants'] = descendants
                 member_record['Code Type'] = code_type
-                # Add to unique clinical pseudo dict (deduplicate by emis_guid)
-                unique_clinical_pseudo[emis_guid] = member_record
+                # Add source info for both modes (will be hidden in UI for unique_codes mode)
+                member_record['Source GUID'] = guid_info.get('source_guid', 'Unknown')
+                # Add to unique clinical pseudo dict
+                if dedupe_key in unique_clinical_pseudo:
+                    # Replace existing entry if new one has better details
+                    if should_replace_entry(unique_clinical_pseudo[dedupe_key], member_record):
+                        unique_clinical_pseudo[dedupe_key] = member_record
+                else:
+                    unique_clinical_pseudo[dedupe_key] = member_record
             else:
                 # Skip EMIS internal codes entirely - they're not medical codes
                 if code_system.upper() == 'EMISINTERNAL':
@@ -171,14 +260,28 @@ def translate_emis_guids_to_snomed(emis_guids, lookup_df, emis_guid_col, snomed_
                 # Fall back to lookup table source type for unknown code systems
                 if source_type in ['Medication', 'Constituent', 'DM+D']:
                     member_record['Medication Type'] = 'Standard Medication'
-                    unique_medication_pseudo[emis_guid] = member_record
+                    # Add source info for both modes (will be hidden in UI for unique_codes mode)
+                    member_record['Source GUID'] = guid_info.get('source_guid', 'Unknown')
+                    if dedupe_key in unique_medication_pseudo:
+                        # Replace existing entry if new one has better details
+                        if should_replace_entry(unique_medication_pseudo[dedupe_key], member_record):
+                            unique_medication_pseudo[dedupe_key] = member_record
+                    else:
+                        unique_medication_pseudo[dedupe_key] = member_record
                 else:
                     member_record['Include Children'] = 'Yes' if guid_info['include_children'] else 'No'
                     member_record['Has Qualifier'] = has_qualifier
                     member_record['Is Parent'] = is_parent
                     member_record['Descendants'] = descendants
                     member_record['Code Type'] = code_type
-                    unique_clinical_pseudo[emis_guid] = member_record
+                    # Add source info for both modes (will be hidden in UI for unique_codes mode)
+                    member_record['Source GUID'] = guid_info.get('source_guid', 'Unknown')
+                    if dedupe_key in unique_clinical_pseudo:
+                        # Replace existing entry if new one has better details
+                        if should_replace_entry(unique_clinical_pseudo[dedupe_key], member_record):
+                            unique_clinical_pseudo[dedupe_key] = member_record
+                    else:
+                        unique_clinical_pseudo[dedupe_key] = member_record
             
             continue  # Don't add to standalone codes
         
@@ -226,22 +329,40 @@ def translate_emis_guids_to_snomed(emis_guids, lookup_df, emis_guid_col, snomed_
             column_context = guid_info.get('column_context')
             
             # Use XML codeSystem and context as primary indicator of type
+            dedupe_key = get_deduplication_key(guid_info)
             if is_medication_code_system(code_system, table_context, column_context):
                 result['Medication Type'] = get_medication_type_flag(code_system)
-                # Add to unique medications dict (deduplicate by emis_guid)
+                # Add source info for both modes (will be hidden in UI for unique_codes mode)
+                result['Source GUID'] = guid_info.get('source_guid', 'Unknown')
                 # Always prioritize medication context - remove from clinical if it exists there
-                if emis_guid in unique_clinical_codes:
-                    del unique_clinical_codes[emis_guid]
-                unique_medications[emis_guid] = result
+                if dedupe_key in unique_clinical_codes:
+                    del unique_clinical_codes[dedupe_key]
+                # Check if we already have this medication
+                if dedupe_key in unique_medications:
+                    # Replace existing entry if new one has better details
+                    if should_replace_entry(unique_medications[dedupe_key], result):
+                        unique_medications[dedupe_key] = result
+                else:
+                    # First time seeing this medication, add it
+                    unique_medications[dedupe_key] = result
             elif is_clinical_code_system(code_system, table_context, column_context):
                 result['Include Children'] = 'Yes' if guid_info['include_children'] else 'No'
                 result['Has Qualifier'] = has_qualifier
                 result['Is Parent'] = is_parent
                 result['Descendants'] = descendants
                 result['Code Type'] = code_type
+                # Add source info for both modes (will be hidden in UI for unique_codes mode)
+                result['Source GUID'] = guid_info.get('source_guid', 'Unknown')
                 # Only add to clinical if it's not already in medications (medication context takes priority)
-                if emis_guid not in unique_medications:
-                    unique_clinical_codes[emis_guid] = result
+                if dedupe_key not in unique_medications:
+                    # Check if we already have this clinical code
+                    if dedupe_key in unique_clinical_codes:
+                        # Replace existing entry if new one has better details
+                        if should_replace_entry(unique_clinical_codes[dedupe_key], result):
+                            unique_clinical_codes[dedupe_key] = result
+                    else:
+                        # First time seeing this code, add it
+                        unique_clinical_codes[dedupe_key] = result
             else:
                 # Skip EMIS internal codes entirely - they're not medical codes
                 if code_system.upper() == 'EMISINTERNAL':
@@ -250,19 +371,37 @@ def translate_emis_guids_to_snomed(emis_guids, lookup_df, emis_guid_col, snomed_
                 # Fall back to lookup table source type for unknown code systems
                 if source_type in ['Medication', 'Constituent', 'DM+D']:
                     result['Medication Type'] = 'Standard Medication'
+                    # Add source info for both modes (will be hidden in UI for unique_codes mode)
+                    result['Source GUID'] = guid_info.get('source_guid', 'Unknown')
                     # Remove from clinical if it exists there
-                    if emis_guid in unique_clinical_codes:
-                        del unique_clinical_codes[emis_guid]
-                    unique_medications[emis_guid] = result
+                    if dedupe_key in unique_clinical_codes:
+                        del unique_clinical_codes[dedupe_key]
+                    # Check if we already have this medication
+                    if dedupe_key in unique_medications:
+                        # Replace existing entry if new one has better details
+                        if should_replace_entry(unique_medications[dedupe_key], result):
+                            unique_medications[dedupe_key] = result
+                    else:
+                        # First time seeing this medication, add it
+                        unique_medications[dedupe_key] = result
                 else:
                     result['Include Children'] = 'Yes' if guid_info['include_children'] else 'No'
                     result['Has Qualifier'] = has_qualifier
                     result['Is Parent'] = is_parent
                     result['Descendants'] = descendants
                     result['Code Type'] = code_type
+                    # Add source info for both modes (will be hidden in UI for unique_codes mode)
+                    result['Source GUID'] = guid_info.get('source_guid', 'Unknown')
                     # Only add to clinical if it's not already in medications
-                    if emis_guid not in unique_medications:
-                        unique_clinical_codes[emis_guid] = result
+                    if dedupe_key not in unique_medications:
+                        # Check if we already have this clinical code
+                        if dedupe_key in unique_clinical_codes:
+                            # Replace existing entry if new one has better details
+                            if should_replace_entry(unique_clinical_codes[dedupe_key], result):
+                                unique_clinical_codes[dedupe_key] = result
+                        else:
+                            # First time seeing this code, add it
+                            unique_clinical_codes[dedupe_key] = result
     
     # Convert dictionaries back to lists (now deduplicated)
     clinical_codes = list(unique_clinical_codes.values())
@@ -274,6 +413,7 @@ def translate_emis_guids_to_snomed(emis_guids, lookup_df, emis_guid_col, snomed_
     deduplicated_pseudo_refset_members = {}
     for valueset_guid, members_dict in pseudo_refset_members.items():
         deduplicated_pseudo_refset_members[valueset_guid] = list(members_dict.values())
+    
     
     return {
         'clinical': clinical_codes,
