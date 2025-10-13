@@ -8,6 +8,14 @@ from .restriction_parser import parse_restriction, RestrictionParser
 from .value_set_parser import parse_value_set, ValueSetParser
 from .linked_criteria_parser import parse_linked_criterion, LinkedCriteriaParser
 from .base_parser import XMLParserBase, get_namespaces
+from .xml_utils import (
+    parse_xml_for_emis_guids, 
+    is_pseudo_refset, 
+    is_pseudo_refset_from_xml_structure,
+    get_medication_type_flag, 
+    is_medication_code_system, 
+    is_clinical_code_system
+)
 
 __all__ = [
     'parse_criterion',
@@ -20,5 +28,11 @@ __all__ = [
     'ValueSetParser', 
     'LinkedCriteriaParser',
     'XMLParserBase',
-    'get_namespaces'
+    'get_namespaces',
+    'parse_xml_for_emis_guids',
+    'is_pseudo_refset',
+    'is_pseudo_refset_from_xml_structure',
+    'get_medication_type_flag',
+    'is_medication_code_system',
+    'is_clinical_code_system'
 ]

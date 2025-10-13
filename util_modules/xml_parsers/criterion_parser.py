@@ -113,6 +113,37 @@ class CriterionParser(XMLParserBase):
                                             if nested_value_set:
                                                 value_sets.append(nested_value_set)
             
+            # Parse value sets from testAttribute sections within restrictions
+            # This handles the pattern: <restriction><testAttribute><columnValue><valueSet>
+            for filter_attr in filter_attrs:
+                namespaced_restrictions = self.find_elements(filter_attr, 'emis:restriction')
+                non_namespaced_restrictions = filter_attr.findall('restriction')
+                all_restrictions = non_namespaced_restrictions + [r for r in namespaced_restrictions if r not in non_namespaced_restrictions]
+                
+                for restriction_elem in all_restrictions:
+                    # Find testAttribute elements within restrictions
+                    namespaced_test_attrs = self.find_elements(restriction_elem, 'emis:testAttribute')
+                    non_namespaced_test_attrs = restriction_elem.findall('testAttribute')
+                    all_test_attrs = non_namespaced_test_attrs + [t for t in namespaced_test_attrs if t not in non_namespaced_test_attrs]
+                    
+                    for test_attr_elem in all_test_attrs:
+                        # Find columnValue elements within testAttribute
+                        namespaced_cols = self.find_elements(test_attr_elem, 'emis:columnValue')
+                        non_namespaced_cols = test_attr_elem.findall('columnValue')
+                        all_cols = non_namespaced_cols + [c for c in namespaced_cols if c not in non_namespaced_cols]
+                        
+                        for col_elem in all_cols:
+                            # Find value sets within these columnValue elements
+                            namespaced_vs = self.find_elements(col_elem, 'emis:valueSet')
+                            non_namespaced_vs = col_elem.findall('valueSet')
+                            col_valuesets = non_namespaced_vs + [v for v in namespaced_vs if v not in non_namespaced_vs]
+                            
+                            for vs in col_valuesets:
+                                if vs not in all_valuesets:  # Avoid duplicates
+                                    all_valuesets.append(vs)
+                                    test_attr_value_set = parse_value_set(vs, self.namespaces)
+                                    if test_attr_value_set:
+                                        value_sets.append(test_attr_value_set)
             # Parse library items (internal EMIS libraries) - handle both namespaced and non-namespaced
             namespaced_library = self.find_elements(criterion_elem, './/emis:libraryItem')
             non_namespaced_library = criterion_elem.findall('.//libraryItem')

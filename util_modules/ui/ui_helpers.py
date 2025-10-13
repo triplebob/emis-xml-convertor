@@ -139,28 +139,76 @@ def render_section_with_data(
         # Create display version with emojis for UI
         display_df = df.copy()
         
+        # Apply proper column filtering and ordering like clinical codes tab
+        from .tabs.field_mapping import get_display_columns, get_hidden_columns
+        
+        # Get debug mode from sidebar toggle (not tab-specific toggles)
+        show_debug = st.session_state.get('debug_mode', False)
+        
+        # Always hide certain columns
+        always_hidden = ['ValueSet GUID', 'VALUESET GUID']
+        for col in always_hidden:
+            if col in display_df.columns:
+                display_df = display_df.drop(columns=[col])
+        
+        # Hide raw duplicate columns that have formatted versions
+        raw_columns_to_hide = ['source_guid', 'source_name', 'source_container', 'source_type', 'report_type']
+        for col in raw_columns_to_hide:
+            if col in display_df.columns:
+                display_df = display_df.drop(columns=[col])
+        
+        # Hide internal categorization flags
+        internal_flags_to_hide = ['is_refset', 'is_pseudo', 'is_medication', 'is_pseudorefset', 'is_pseudomember']
+        for col in internal_flags_to_hide:
+            if col in display_df.columns:
+                display_df = display_df.drop(columns=[col])
+        
+        # Hide debug columns unless debug mode is enabled
+        if not show_debug and '_original_fields' in display_df.columns:
+            display_df = display_df.drop(columns=['_original_fields'])
+        
         # Hide source columns in unique_codes mode for display only (keep data for export)
         current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
         if current_mode == 'unique_codes':
             # Remove source columns from display but keep original df with all columns for export
-            columns_to_hide = ['Source', 'Source Type', 'Source GUID']
+            columns_to_hide = ['Source Type', 'Source Name', 'Source Container', 'Source GUID']
             for col in columns_to_hide:
                 if col in display_df.columns:
                     display_df = display_df.drop(columns=[col])
+        
+        # Apply column ordering if we have clinical code data
+        if 'EMIS GUID' in display_df.columns and 'SNOMED Code' in display_df.columns:
+            try:
+                display_columns = get_display_columns()
+                # Reorder columns to match expected order, keeping any extra columns at the end
+                ordered_columns = []
+                for col in display_columns:
+                    if col in display_df.columns:
+                        ordered_columns.append(col)
+                # Add any remaining columns not in the standard order
+                for col in display_df.columns:
+                    if col not in ordered_columns:
+                        ordered_columns.append(col)
+                display_df = display_df[ordered_columns]
+            except Exception:
+                # Fallback to original column order if reordering fails
+                pass
         
         # Add emojis to specific columns for better UI display (without affecting CSV export)
         if 'EMIS GUID' in display_df.columns:
             display_df['EMIS GUID'] = '🔍 ' + display_df['EMIS GUID'].astype(str)
         if 'SNOMED Code' in display_df.columns:
             display_df['SNOMED Code'] = '🩺 ' + display_df['SNOMED Code'].astype(str)
-        if 'Source' in display_df.columns:
-            # Add appropriate emojis based on source type
-            display_df['Source'] = display_df['Source'].apply(lambda x: 
-                f"🔍 {x}" if x == "Search" else
-                f"📊 {x}" if "Aggregate" in str(x) else
-                f"📋 {x}" if "List" in str(x) else
-                f"📈 {x}" if "Audit" in str(x) else
-                f"📊 {x}"
+        if 'Source Type' in display_df.columns:
+            # Only add emojis if they're not already present (to avoid double emojis)
+            display_df['Source Type'] = display_df['Source Type'].apply(lambda x: 
+                x if ('🔍' in str(x) or '📊' in str(x) or '📋' in str(x) or '📈' in str(x)) else (
+                    f"🔍 {x}" if x and x == "Search" else
+                    f"📊 {x}" if x and "Aggregate" in str(x) else
+                    f"📋 {x}" if x and "List" in str(x) else
+                    f"📈 {x}" if x and "Audit" in str(x) else
+                    f"📊 {x}" if x else x  # Don't add emoji to empty values
+                )
             )
         
         # Apply highlighting if provided
@@ -178,7 +226,7 @@ def render_section_with_data(
                 # Check if we have source tracking to offer source-based filtering
                 # In unique_codes mode, source columns are filtered out but we should still offer source-based exports
                 current_mode = st.session_state.get('current_deduplication_mode', 'unique_codes')
-                has_source_tracking = 'Source' in df.columns and 'Source Type' in df.columns
+                has_source_tracking = 'Source Type' in df.columns and 'Source Name' in df.columns
                 
                 # Always show source-based export options if we have Source columns or Source GUID in the data
                 # The data now always includes source tracking, even if hidden in unique_codes mode
@@ -212,9 +260,9 @@ def render_section_with_data(
                     export_label = download_label.replace("📥", "📥 ❌")
                     export_suffix = "_unmatched"
                 elif export_filter == "Only Codes from Searches":
-                    # Filter by source - check if Source column is available, otherwise look for source info in data
-                    if 'Source' in df.columns:
-                        filtered_df = df[df['Source'] == 'Search']
+                    # Filter by source - check if Source Type column is available, otherwise look for source info in data
+                    if 'Source Type' in df.columns:
+                        filtered_df = df[df['Source Type'] == 'Search']
                     else:
                         # Filter based on original data source tracking
                         search_codes = []
@@ -225,9 +273,9 @@ def render_section_with_data(
                     export_label = download_label.replace("📥", "📥 🔍")
                     export_suffix = "_searches"
                 elif export_filter == "Only Codes from Reports":
-                    # Filter by source - check if Source column is available, otherwise look for source info in data
-                    if 'Source' in df.columns:
-                        filtered_df = df[df['Source'].str.contains('Report', na=False)]
+                    # Filter by source - check if Source Type column is available, otherwise look for source info in data
+                    if 'Source Type' in df.columns:
+                        filtered_df = df[df['Source Type'].str.contains('Report', na=False)]
                     else:
                         # Filter based on original data source tracking
                         report_codes = []

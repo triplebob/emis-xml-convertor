@@ -2,7 +2,7 @@
 
 ## Overview
 
-This application converts EMIS XML search files into SNOMED clinical codes and provides detailed analysis of search logic, rules, and criteria. The codebase is organized into logical modules for maintainability and separation of different XML parsing logic between searches and reports.
+This application converts EMIS XML search files into SNOMED clinical codes and provides detailed analysis of search logic, rules, and criteria. The codebase uses a unified pipeline architecture with specialized analyzers for efficient processing and consistent data handling across the application.
 
 ## Core Application Flow
 
@@ -13,9 +13,11 @@ extract_codes_with_separate_parsers() (separate search/report parsing)
     ↓ GUID list with source attribution
 util_modules.core.translator (GUIDs → SNOMED codes)
     ↓ translated results
-util_modules.analysis.xml_structure_analyzer (orchestrates analysis)
-    ↓ unified results
-util_modules.ui.ui_tabs (5-tab interface display)
+util_modules.analysis.analysis_orchestrator (unified analysis coordination)
+    ↓ orchestrated results
+util_modules.ui.ui_tabs (main interface coordinator)
+    ↓ delegates to modular tabs
+util_modules.ui.tabs.* (specialized tab rendering)
     ↓ export requests
 util_modules.export_handlers (specialized export handling)
 ```
@@ -29,13 +31,13 @@ util_modules.export_handlers (specialized export handling)
 - File upload interface and user controls
 - XML processing orchestration using separate parsers
 - Progress tracking and user feedback
-- Session state management
+- Session state management with caching
 - Dual-mode deduplication support (unique codes vs per-source)
-- Calls xml_utils → core.translator → analysis modules → ui modules
+- Unified clinical data caching for performance
 
 **Key Functions:**
 - `extract_codes_with_separate_parsers()` - Maintains search/report parser separation
-- `_reprocess_with_new_mode()` - Handles deduplication mode changes
+- Session state management with cache invalidation
 
 **When to modify:** UI layout changes, main workflow changes, parser coordination updates.
 
@@ -99,7 +101,40 @@ util_modules.export_handlers (specialized export handling)
 
 **When to modify:** Search data handling, filtering improvements.
 
+### `background_processor.py` - Background Processing
+**Purpose:** ProcessPoolExecutor-based background processing for heavy XML analysis tasks.
+
+**Responsibilities:**
+- Concurrent processing with ProcessPoolExecutor
+- Task status management and progress tracking
+- Memory-efficient processing for large XML files
+- Thread-safe task execution and result handling
+
+**When to modify:** Heavy processing optimization, concurrency improvements.
+
+### `optimized_processor.py` - Processing Integration
+**Purpose:** Integrates background processing, progressive loading, and optimized caching with Streamlit patterns.
+
+**Responsibilities:**
+- Background processor and progressive loader integration
+- Optimized caching with session state management
+- Threading and queue management for UI responsiveness
+- Performance monitoring and optimization coordination
+
+**When to modify:** Processing pipeline optimization, UI responsiveness improvements.
+
 ## Analysis and Visualization (`util_modules/analysis/`)
+
+### `analysis_orchestrator.py` - Central Analysis Coordination
+**Purpose:** Coordinates complete analysis pipeline and unifies results from specialized analyzers.
+
+**Responsibilities:**
+- Workflow coordination: XMLElementClassifier → SearchAnalyzer → ReportAnalyzer
+- Results unification from specialized analyzers
+- Complexity metric integration
+- Session state preparation for UI compatibility
+
+**When to modify:** Analysis workflow changes, new analyzer integration.
 
 ### `xml_element_classifier.py` - Initial Element Classification
 **Purpose:** Single XML parse that classifies all elements by type for efficient processing.
@@ -115,17 +150,6 @@ util_modules.export_handlers (specialized export handling)
 
 **When to modify:** New element types, XML structure changes, classification logic.
 
-### `analysis_orchestrator.py` - Central Analysis Coordination
-**Purpose:** Coordinates complete analysis pipeline and unifies results.
-
-**Responsibilities:**
-- Workflow coordination: XMLElementClassifier → SearchAnalyzer → ReportAnalyzer
-- Results unification from specialized analyzers
-- Complexity metric integration
-- Session state preparation for UI compatibility
-
-**When to modify:** Analysis workflow changes, new analyzer integration.
-
 ### `xml_structure_analyzer.py` - Compatibility Interface
 **Purpose:** Maintains backward compatibility while using orchestrated architecture.
 
@@ -136,6 +160,28 @@ util_modules.export_handlers (specialized export handling)
 - Zero breaking changes for existing interfaces
 
 **When to modify:** Interface compatibility issues or full migration planning.
+
+### `search_rule_analyzer.py` - Legacy Search Analysis
+**Purpose:** Legacy search rule analysis engine (pre-orchestrated architecture).
+
+**Responsibilities:**
+- Search rule parsing with modular XML parsers
+- Criteria relationships and folder structure
+- Report classification and dependency mapping
+- Backwards compatibility for legacy analysis patterns
+
+**When to modify:** Legacy compatibility issues or migration tasks.
+
+### `performance_optimizer.py` - Performance Monitoring
+**Purpose:** Cloud-compatible performance optimization and monitoring controls.
+
+**Responsibilities:**
+- Memory usage monitoring and optimization
+- Large file processing controls (chunking)
+- Performance metrics and feedback
+- Streamlit Cloud compatibility optimizations
+
+**When to modify:** Performance issues, cloud deployment optimization.
 
 ### `search_analyzer.py` - Search Logic Analysis
 **Purpose:** Specialized analyzer for EMIS search population logic.
@@ -190,10 +236,11 @@ util_modules.export_handlers (specialized export handling)
 **Purpose:** Interactive displays for search rules, criteria, and detailed analysis.
 
 **Responsibilities:**
-- Detailed rule and criteria displays
+- Detailed rule and criteria displays with proper Include/Exclude logic
 - Linked criteria relationships
-- Search complexity analysis
+- Search complexity analysis with unified pipeline integration
 - Search-specific export functionality
+- Filter hierarchy display (Filters → Additional Filters)
 
 #### `report_structure_visualizer.py` - Report Structure Display
 **Purpose:** Interactive displays for report structure and dependencies.
@@ -211,52 +258,136 @@ util_modules.export_handlers (specialized export handling)
 
 ## User Interface (`util_modules/ui/`)
 
-### `ui_tabs.py` - Main Results Interface
-**Purpose:** 5-tab interface providing analysis for each EMIS report type.
+### `ui_tabs.py` - Main Results Interface Coordinator
+**Purpose:** Coordinates tab rendering and provides main results interface entry point.
+
+**Responsibilities:**
+- Tab routing and rendering coordination
+- Session state management for tab switching
+- Main results interface orchestration
+
+**When to modify:** Overall tab structure changes, main interface routing.
+
+### Modular Tab Structure (`util_modules/ui/tabs/`)
+
+#### `clinical_tabs.py` - Clinical Data Tab Rendering
+**Purpose:** Comprehensive clinical data tab rendering with unified pipeline integration.
 
 **Tab Structure:**
-1. **Clinical Codes** - Clinical code analysis with dual-mode deduplication
-2. **Search Analysis** - Search logic analysis (folder structure, dependencies, rule logic browser)
-3. **List Reports** - List Report browser with column structure analysis
-4. **Audit Reports** - Audit Report browser with organizational focus
-5. **Aggregate Reports** - Aggregate Report browser with statistical analysis
+- **Clinical Codes** - Standalone clinical codes with dual-mode deduplication
+- **Medications** - Medication codes with source tracking
+- **Refsets** - True refsets (EMIS-supported)  
+- **Pseudo-Refsets** - Pseudo-refsets with member code access
+- **Pseudo-Refset Members** - Individual pseudo-refset member codes
+- **Clinical Codes Main** - Aggregated clinical codes view
 
 **Key Features:**
-- Dual-mode deduplication controls on applicable tabs
-- Automatic reprocessing when deduplication mode changes
+- Unified pipeline integration with caching for performance
+- Dual-mode deduplication (Unique Codes vs Per Source)
+- Source tracking with GUID mapping
+- Container information (Search Rule Main Criteria, Report Column Group, etc.)
+- Export functionality per section
+
+**When to modify:** Clinical code display, medication handling, refset functionality.
+
+#### `analysis_tabs.py` - Analysis Tab Rendering
+**Purpose:** Search analysis and structure visualization with unified pipeline integration.
+
+**Responsibilities:**
+- Search logic analysis display with consistent search counts
+- Folder structure visualization
+- Search dependencies and rule logic browser
+- Complexity analysis with unified metrics
+
+**When to modify:** Search analysis features, dependency visualization.
+
+#### `analytics_tab.py` - Analytics Display
+**Purpose:** Statistics and analytics visualization using unified pipeline data.
+
+**When to modify:** Statistics display, analytics features.
+
+#### `report_tabs.py` - Report Tab Rendering
+**Purpose:** Specialized rendering for List Reports, Audit Reports, and Aggregate Reports.
+
+**Responsibilities:**
+- List Report browser with column structure analysis
+- Audit Report browser with organizational focus
+- Aggregate Report browser with statistical analysis
 - Report-type-specific interfaces and metrics
-- Individualized folder browsers per report type
+- Immediate download functionality (no page refresh)
+- Proper field capitalization (Population, Count, etc.)
 
-**Deduplication Modes:**
-- **Unique Codes**: Shows each code once across entire XML
-- **Per Source**: Shows codes with source attribution (search/report GUIDs)
+**When to modify:** Report-specific enhancements, new report patterns.
 
-**When to modify:** Report-specific enhancements, new healthcare patterns, deduplication UI.
+#### `tab_helpers.py` - Shared Tab Utilities
+**Purpose:** Common functionality shared across all tab modules with unified pipeline support.
 
-### `status_bar.py` - Application Status Display
+**Key Functions:**
+- `get_unified_clinical_data()` - Unified pipeline data access with caching
+- `_add_source_info_to_clinical_data()` - GUID mapping and source tracking
+- `_deduplicate_clinical_data_by_emis_guid()` - Deduplication logic
+- `_reprocess_with_new_mode()` - Mode switching logic with cache invalidation
+- `_lookup_snomed_for_ui()` - SNOMED lookup integration
+
+**When to modify:** Shared tab functionality, GUID mapping logic, deduplication improvements.
+
+#### `base_tab.py` - Tab Base Classes
+**Purpose:** Base classes and common patterns for tab implementations.
+
+**When to modify:** Common tab patterns, base functionality.
+
+#### `common_imports.py` - Shared Imports
+**Purpose:** Common imports used across tab modules to reduce duplication.
+
+**When to modify:** Shared dependencies, import organization.
+
+#### `field_mapping.py` - Universal Field Mapping
+**Purpose:** Standardized field names and mapping functions for clinical codes.
+
+**Responsibilities:**
+- Canonical field name definitions (EMIS GUID, SNOMED Code, etc.)
+- Consistent field mapping across all application components
+- Translation between different data source formats
+- Field validation and standardization
+
+**When to modify:** New data sources, field name changes, standardization requirements.
+
+### Core UI Components
+
+#### `status_bar.py` - Application Status Display
 **Purpose:** Shows lookup table status and system health.
 
 **Responsibilities:**
 - Lookup table loading and status
-- Version information display (stored in session state)
+- Version information display
 - Error state handling
 
 **When to modify:** Status display changes, new health checks.
 
-### `ui_helpers.py` - Reusable UI Components
-**Purpose:** Common UI functions used across tabs.
+#### `ui_helpers.py` - Reusable UI Components
+**Purpose:** Common UI functions used across the application.
 
 **When to modify:** UI consistency improvements, new display patterns.
 
-### `rendering_utils.py` - Standard UI Components
+#### `rendering_utils.py` - Standard UI Components
 **Purpose:** Standardized Streamlit components for consistent UI.
 
 **When to modify:** UI standardization, new component patterns.
 
-### `layout_utils.py` - Complex Layout Management
+#### `layout_utils.py` - Complex Layout Management
 **Purpose:** Advanced layout utilities for complex UI arrangements.
 
 **When to modify:** Complex UI layouts, navigation improvements.
+
+#### `progressive_loader.py` - Progressive Loading Components
+**Purpose:** Progressive loading and performance optimization for large datasets.
+
+**When to modify:** Loading performance, large dataset handling.
+
+#### `async_components.py` - Asynchronous UI Components
+**Purpose:** Asynchronous components for improved responsiveness.
+
+**When to modify:** Async functionality, performance improvements.
 
 ## Export Functionality (`util_modules/export_handlers/`)
 
@@ -416,13 +547,22 @@ util_modules/
 
 ## Key Architectural Features
 
+### Unified Pipeline Architecture
+**Purpose:** Consistent data handling across all UI components with performance optimization.
+
+**Implementation:**
+- **Analysis Orchestrator**: Central coordination of all analysis components
+- **Unified Clinical Data**: Cached pipeline results accessible via `get_unified_clinical_data()`
+- **Consistent Search Counts**: All tabs use same data source for accurate metrics
+- **Performance Caching**: Session state caching with automatic invalidation
+
 ### Dual-Mode Deduplication System
 **Purpose:** Allows users to toggle between unique codes vs per-source views.
 
 **Implementation:**
 - **Parser Level**: Source GUID attribution in xml_utils.py
 - **Translation Level**: Mode-specific deduplication in translator.py
-- **UI Level**: Inline toggles on applicable tabs in ui_tabs.py
+- **UI Level**: Inline toggles on applicable tabs
 - **Export Level**: Conditional source tracking in export handlers
 
 ### Universal Namespace Handling
@@ -450,7 +590,7 @@ util_modules/
 **Search rule logic:** `util_modules/analysis/search_analyzer.py`
 **Translation issues:** `util_modules/core/translator.py` or `xml_utils.py`
 **Lookup table problems:** `util_modules/utils/lookup.py`
-**Performance issues:** `util_modules/analysis/performance_optimizer.py`
+**Performance issues:** Check caching in `tab_helpers.py`
 **Main app workflow:** `streamlit_app.py`
 **Error handling:** `util_modules/common/error_handling.py`
 **XML parsing:** `util_modules/xml_parsers/`

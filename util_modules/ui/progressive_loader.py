@@ -377,7 +377,7 @@ def create_lazy_dataframe_renderer(
             df_to_show = df
         
         # Render DataFrame
-        st.dataframe(df_to_show, use_container_width=True)
+        st.dataframe(df_to_show, width='stretch')
         
         return df
     
@@ -462,7 +462,7 @@ def monitor_component_performance():
             
             if component_data:
                 df = pd.DataFrame(component_data)
-                st.dataframe(df, use_container_width=True)
+                st.dataframe(df, width='stretch')
 
 
 def clear_progressive_cache():

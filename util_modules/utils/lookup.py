@@ -386,7 +386,7 @@ def display_lookup_performance_metrics():
                     st.success("Lookup cache refreshed")
                     st.rerun()
 
-@st.cache_data(ttl=7200)  # Cache for 2 hours - longer than lookup table cache
+@st.cache_data(ttl=7200, show_spinner=False)  # Cache for 2 hours, no spinner
 def create_lookup_dictionaries(lookup_df, emis_guid_col, snomed_code_col):
     """Create optimized lookup dictionaries for O(1) GUID to SNOMED translation."""
     # GUID -> SNOMED mapping for clinical codes and medications

@@ -53,6 +53,23 @@ def parse_xml_for_emis_guids(xml_content, source_guid=None):
             vs_id = valueset_id.text if valueset_id is not None else "N/A"
             vs_desc = valueset_description.text if valueset_description is not None else "N/A"
             
+            # Perform XML structure-based detection for refset types
+            is_pseudo_refset_container = is_pseudo_refset_from_xml_structure(valueset, ns)
+            
+            # Analyze structure to understand this valueSet
+            values_elements = ns.findall_with_path(valueset, './/values')
+            has_refset_flag = False
+            refset_values_element = None
+            
+            # Check if any values element has isRefset = true
+            for values in values_elements:
+                is_refset_elem = ns.find(values, 'isRefset')
+                if is_refset_elem is not None and is_refset_elem.text and is_refset_elem.text.lower() == 'true':
+                    has_refset_flag = True
+                    refset_values_element = values
+                    break
+            
+            
             
             # If no description at valueSet level, try to get displayName from first values element
             if vs_desc == "N/A":
@@ -130,6 +147,19 @@ def parse_xml_for_emis_guids(xml_content, source_guid=None):
                         
                         xml_display_name = display_name_elem.text if display_name_elem is not None else "N/A"
                     
+                    # Determine flags based on XML structure
+                    is_pseudorefset_flag = False
+                    is_pseudomember_flag = False
+                    
+                    if has_refset_flag:  # This valueSet contains a refset
+                        if is_refset_bool:  # This specific code is the refset identifier
+                            if is_pseudo_refset_container:
+                                is_pseudorefset_flag = True  # Pseudo-refset identifier
+                            # If not pseudo, it's a true refset (is_refset=True is sufficient)
+                        else:  # This is a member code in the same valueSet as a refset
+                            if is_pseudo_refset_container:
+                                is_pseudomember_flag = True  # Member of pseudo-refset
+                    
                     emis_guids.append({
                         'valueSet_guid': vs_id,
                         'valueSet_description': vs_desc,
@@ -138,6 +168,8 @@ def parse_xml_for_emis_guids(xml_content, source_guid=None):
                         'xml_display_name': xml_display_name,
                         'include_children': include_children.lower() == 'true',
                         'is_refset': is_refset_bool,
+                        'is_pseudorefset': is_pseudorefset_flag,
+                        'is_pseudomember': is_pseudomember_flag,
                         'table_context': table_context,
                         'column_context': column_context,
                         'source_guid': source_guid  # Track which search/report this came from
@@ -207,28 +239,49 @@ def parse_xml_for_emis_guids(xml_content, source_guid=None):
     except Exception as e:
         raise Exception(f"Error processing XML: {str(e)}")
 
+def is_pseudo_refset_from_xml_structure(valueset_element, ns):
+    """
+    Detect if a valueSet is a pseudo-refset based on XML structure.
+    
+    True refsets: <isRefset>true</isRefset></values></valueSet> (ends immediately)
+    Pseudo refsets: <isRefset>true</isRefset></values><values><value> (continues with member codes)
+    """
+    try:
+        # Find all values elements within this valueSet
+        values_elements = ns.findall_with_path(valueset_element, './/values')
+        
+        # Check if any values element has isRefset = true
+        refset_values_element = None
+        for values in values_elements:
+            is_refset_elem = ns.find(values, 'isRefset')
+            if is_refset_elem is not None and is_refset_elem.text and is_refset_elem.text.lower() == 'true':
+                refset_values_element = values
+                break
+        
+        if refset_values_element is None:
+            return False  # Not a refset at all
+        
+        # Count total values elements in this valueSet
+        total_values_count = len(values_elements)
+        
+        # True refset: Only ONE values element (the one with isRefset=true)
+        # Pseudo refset: MULTIPLE values elements (isRefset=true + member values)
+        if total_values_count == 1:
+            return False  # True refset - only the refset identifier itself
+        else:
+            return True   # Pseudo refset - has member codes after the refset identifier
+            
+    except Exception:
+        return False  # Fallback to false if structure analysis fails
+
+
 def is_pseudo_refset(identifier, valueset_description):
-    """Detect if a valueSet is a pseudo-refset based on its description/identifier patterns."""
-    # Check the identifier (could be GUID or description) for specific pseudo-refset patterns
-    identifier_upper = identifier.upper() if identifier else ""
-    
-    # Known pseudo-refset patterns - these are identifiers for pseudo-refsets
-    pseudo_refset_patterns = [
-        'ASTTRT_COD',    # Asthma treatment codes
-        'ASTRES_COD',    # Asthma register codes
-        'AST_COD',       # Asthma codes
-        # Add other known pseudo-refset identifiers here as needed
-    ]
-    
-    # Check for exact matches with known pseudo-refset identifiers
-    for pattern in pseudo_refset_patterns:
-        if pattern in identifier_upper:
-            return True
-    
-    # Check for general pattern: ends with _COD and looks like a refset identifier (not numeric)
-    if identifier_upper.endswith('_COD') and not identifier_upper.replace('_', '').replace('COD', '').isdigit():
-        return True
-    
+    """
+    Legacy function kept for compatibility. 
+    Proper detection should use is_pseudo_refset_from_xml_structure during XML parsing.
+    """
+    # This is kept for backward compatibility but should not be used for new code
+    # The proper detection happens during XML structure analysis
     return False
 
 def get_medication_type_flag(code_system):

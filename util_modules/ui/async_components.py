@@ -448,7 +448,7 @@ class AsyncDataFrameRenderer:
             st.caption(f"Showing rows {start_idx + 1}-{end_idx}")
         
         # Render DataFrame
-        st.dataframe(df_to_show, use_container_width=True)
+        st.dataframe(df_to_show, width='stretch')
         
         # Download option
         if st.button(f"📥 Download {title} CSV", key=f"download_{df_id}"):

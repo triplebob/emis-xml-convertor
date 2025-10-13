@@ -1,5 +1,98 @@
 # Changelog
 
+## v2.0.1 - Performance & UI Improvements (October 2025)
+
+### 🚀 **Performance Optimizations**
+
+**Unified Pipeline Caching:**
+- **Instant Loading**: Refsets, pseudo-refsets, and pseudo-members tabs now load instantly after initial processing
+- **Session State Caching**: Added `get_unified_clinical_data()` caching with automatic invalidation
+- **Memory Optimization**: Eliminated redundant processing across clinical code tabs
+
+**Search Count Consistency:**
+- **Unified Metrics**: All tabs now show consistent search counts 
+- **Pipeline Integration**: Analytics, Dependencies, and Rule Logic Browser use same data source
+- **Accurate Reporting**: Fixed discrepancies where tabs showed diferrent counts depending on the parsing logic used
+
+**Streamlit Compatibility:**
+- **Deprecation Fixes**: Replaced all `use_container_width=True` with `width='stretch'`
+- **Future Proofing**: Eliminated hundreds of console debug messages for cleaner operation
+
+### 🎨 **User Interface Enhancements**
+
+**Filter Logic Improvements:**
+- **Include/Exclude Clarity**: Fixed filter parsing to show correct "Include" vs "Exclude" based on XML logic
+- **Hierarchy Display**: Enhanced filter layout with indented "Additional Filters" under main "Filters" section
+- **EMISINTERNAL Logic**: Proper handling of issue methods and internal classifications
+
+**Dependency Tree Enhancements:**
+- **Enhanced Clarity**: Now shows for example "31 root searches, 5 branch searches" instead of just "31 searches"
+- **Total Understanding**: Users can clearly see 31+5=36 total searches across dependency relationships
+- **Consistent Display**: Applied same logic to both Dependency Tree and Detailed Dependency View
+
+**Export Experience:**
+- **One-Click Downloads**: Eliminated page refresh issues - all downloads are now immediate
+- **Consistent Behavior**: Rule Logic Browser and Report tabs now have uniform download experience
+
+### 🔧 **Technical Improvements**
+
+**Rule Logic Browser Fixes:**
+- **Functionality Restored**: Fixed broken rule display that showed "No detailed rules found" in certain XML logic
+- **Data Source Optimization**: Balanced search count accuracy with detailed rule content display
+- **Complexity Metrics**: Maintained accurate complexity analysis (36 searches in breakdown)
+
+**Architecture Updates:**
+- **Module Documentation**: Completely updated `docs/modules.md` to reflect current unified pipeline structure
+- **New Modules Documented**: Added documentation for all recent architectural additions
+
+**Session State Management:**
+- **Cache Invalidation**: Automatic cache clearing when XML files change or deduplication modes switch
+- **Performance Monitoring**: Better tracking of data pipeline efficiency
+- **Error Recovery**: Improved handling of session state inconsistencies
+
+### 🧹 **Code Quality & Maintenance**
+
+**Removed Deprecated Features:**
+- **ZIP Export Cleanup**: Completely removed all ZIP export functionality app-wide
+- **Memory Safety**: Eliminated memory-intensive ZIP creation that was causing performance issues
+- **Clean Codebase**: Removed commented-out ZIP export code and related imports (previously disabled for debugging)
+
+**Consistency Improvements:**
+- **Search Counting**: All tabs use unified pipeline for search metrics
+- **Error Handling**: Standardized error messages and fallback behaviors
+
+### 💡 **User Experience Impact**
+
+**Immediate Benefits:**
+- **Faster Loading**: Clinical code tabs load instantly after first access
+- **Clear Numbers**: Dependency tree clearly shows search relationship structure (31+5=36)
+- **Reliable Downloads**: No more page refresh delays or broken download states
+
+**Technical Reliability:**
+- **Consistent Data**: All tabs show accurate, synchronized search counts
+- **Clean Console**: No deprecation warnings or unnecessary debug output
+- **Stable Performance**: Optimized caching prevents memory issues
+
+---
+
+### **Migration Notes**
+
+**Full Backward Compatibility:**
+- All existing XML files continue to work exactly as before
+- No changes to core translation functionality
+- Enhanced performance without changing user workflows
+
+**Recommended Action:**
+- No action required - improvements are automatic
+- Users will notice faster loading and more consistent displays
+- All existing bookmarks and workflows remain valid
+
+---
+
+*Version 2.0.1 represents a significant quality-of-life improvement focusing on performance, consistency, and professional polish while maintaining 100% backward compatibility.*
+
+---
+
 ## v2.0.0 - Major Release: Complete Application Rebuild (December 2024)
 
 ### 🎯 **Application Transformation**

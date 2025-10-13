@@ -1,4 +1,4 @@
-from xml_utils import is_pseudo_refset, get_medication_type_flag, is_medication_code_system, is_clinical_code_system
+from ..xml_parsers.xml_utils import is_pseudo_refset, get_medication_type_flag, is_medication_code_system, is_clinical_code_system
 from ..utils.lookup import create_lookup_dictionaries
 
 def translate_emis_to_snomed(emis_guids, lookup_df, emis_guid_col, snomed_code_col, deduplication_mode='unique_codes'):
@@ -34,12 +34,8 @@ def translate_emis_to_snomed(emis_guids, lookup_df, emis_guid_col, snomed_code_c
             }
         valueset_groups[valueset_guid]['codes'].append(guid_info)
         
-        # Check if the valueSet itself is a pseudo-refset based on its description
-        # Look for pseudo-refset patterns in the valueSet description (like "ASTTRT_COD")
-        valueset_description = guid_info['valueSet_description']
-        if (not guid_info['is_refset'] and 
-            valueset_description and
-            is_pseudo_refset(valueset_description, valueset_description)):
+        # Check if this code indicates a pseudo-refset container or member using XML structure-based flags
+        if guid_info.get('is_pseudorefset', False):
             pseudo_refset_valuesets.add(valueset_guid)
     
     # Separate results by type
@@ -125,12 +121,28 @@ def translate_emis_to_snomed(emis_guids, lookup_df, emis_guid_col, snomed_code_c
     # Create pseudo-refset containers first
     for valueset_guid in pseudo_refset_valuesets:
         valueset_info = valueset_groups[valueset_guid]['info']
+        member_codes = valueset_groups[valueset_guid]['codes']
+        
         # Count unique member codes (avoid counting duplicates)
         unique_member_codes = set()
-        for code_info in valueset_groups[valueset_guid]['codes']:
+        for code_info in member_codes:
             unique_member_codes.add(code_info['emis_guid'])
         
-        pseudo_refsets.append({
+        # Inherit source information from the first member code (they should all be from the same source)
+        source_info = {}
+        if member_codes:
+            first_member = member_codes[0]
+            source_info = {
+                'source_guid': first_member.get('source_guid', ''),
+                'source_name': first_member.get('source_name', ''),
+                'source_container': first_member.get('source_container', ''),
+                'source_type': first_member.get('source_type', ''),
+                'report_type': first_member.get('report_type', '')
+            }
+        
+        # Create pseudo-refset entry preserving original XML data
+        pseudo_refset_entry = valueset_info.copy()  # Start with all original XML data
+        pseudo_refset_entry.update({
             'ValueSet GUID': valueset_guid,
             'ValueSet Description': valueset_info['valueSet_description'],
             'Code System': valueset_info['code_system'],
@@ -139,6 +151,10 @@ def translate_emis_to_snomed(emis_guids, lookup_df, emis_guid_col, snomed_code_c
             'Status': 'Not in EMIS database - requires member code listing',
             'Member Count': len(unique_member_codes)
         })
+        
+        # Add source information to the pseudo-refset container
+        pseudo_refset_entry.update(source_info)
+        pseudo_refsets.append(pseudo_refset_entry)
         
         # Initialize member dict for this pseudo-refset (for deduplication)
         pseudo_refset_members[valueset_guid] = {}
@@ -162,7 +178,9 @@ def translate_emis_to_snomed(emis_guids, lookup_df, emis_guid_col, snomed_code_c
                 else:
                     refset_source_type = 'Refset'
                 
-                refsets.append({
+                # Create refset entry preserving original XML data
+                refset_entry = guid_info.copy()  # Start with all original XML data
+                refset_entry.update({
                     'ValueSet GUID': valueset_guid,
                     'ValueSet Description': guid_info['valueSet_description'], 
                     'Code System': guid_info['code_system'],
@@ -170,8 +188,15 @@ def translate_emis_to_snomed(emis_guids, lookup_df, emis_guid_col, snomed_code_c
                     'SNOMED Description': guid_info['valueSet_description'],
                     'Type': 'True Refset',
                     'Source Type': refset_source_type,
-                    'Usage': 'Can be referenced directly by SNOMED code in EMIS'
+                    # Add source information from the GUID info
+                    'source_guid': guid_info.get('source_guid', ''),
+                    'source_name': guid_info.get('source_name', ''),
+                    'source_container': guid_info.get('source_container', ''),
+                    'source_type': guid_info.get('source_type', ''),
+                    'report_type': guid_info.get('report_type', '')
                 })
+                
+                refsets.append(refset_entry)
                 
                 # Mark this SNOMED code as already added
                 added_refset_snomed_codes.add(snomed_code)
@@ -203,16 +228,16 @@ def translate_emis_to_snomed(emis_guids, lookup_df, emis_guid_col, snomed_code_c
             if description == "N/A" or not description:
                 description = "No display name in XML"
             
-            # Create the base member record
-            member_record = {
+            # Create the base member record preserving original XML data
+            member_record = guid_info.copy()  # Start with all original XML data
+            member_record.update({
                 'ValueSet GUID': valueset_guid,
                 'ValueSet Description': guid_info['valueSet_description'],
                 'EMIS GUID': emis_guid,
                 'SNOMED Code': snomed_code,
                 'SNOMED Description': description,
-                'Mapping Found': 'Found' if mapping_found else 'Not Found',
-                'Pseudo-Refset Member': 'Yes'
-            }
+                'Mapping Found': 'Found' if mapping_found else 'Not Found'
+            })
             
             # Add to pseudo-refset members (for detailed view) - deduplicate by emis_guid
             detailed_member = member_record.copy()
@@ -230,6 +255,11 @@ def translate_emis_to_snomed(emis_guids, lookup_df, emis_guid_col, snomed_code_c
                 member_record['Medication Type'] = get_medication_type_flag(code_system)
                 # Add source info for both modes (will be hidden in UI for unique_codes mode)
                 member_record['Source GUID'] = guid_info.get('source_guid', 'Unknown')
+                member_record['source_guid'] = guid_info.get('source_guid', '')
+                member_record['source_name'] = guid_info.get('source_name', '')
+                member_record['source_container'] = guid_info.get('source_container', '')
+                member_record['source_type'] = guid_info.get('source_type', '')
+                member_record['report_type'] = guid_info.get('report_type', '')
                 # Add to unique medications pseudo dict
                 if dedupe_key in unique_medication_pseudo:
                     # Replace existing entry if new one has better details
@@ -245,6 +275,11 @@ def translate_emis_to_snomed(emis_guids, lookup_df, emis_guid_col, snomed_code_c
                 member_record['Code Type'] = code_type
                 # Add source info for both modes (will be hidden in UI for unique_codes mode)
                 member_record['Source GUID'] = guid_info.get('source_guid', 'Unknown')
+                member_record['source_guid'] = guid_info.get('source_guid', '')
+                member_record['source_name'] = guid_info.get('source_name', '')
+                member_record['source_container'] = guid_info.get('source_container', '')
+                member_record['source_type'] = guid_info.get('source_type', '')
+                member_record['report_type'] = guid_info.get('report_type', '')
                 # Add to unique clinical pseudo dict
                 if dedupe_key in unique_clinical_pseudo:
                     # Replace existing entry if new one has better details
@@ -310,7 +345,9 @@ def translate_emis_to_snomed(emis_guids, lookup_df, emis_guid_col, snomed_code_c
             if description == "N/A" or not description:
                 description = "No display name in XML"
             
-            result = {
+            # Start with all original XML data to preserve pseudo-refset flags and other metadata
+            result = guid_info.copy()
+            result.update({
                 'ValueSet GUID': valueset_guid,
                 'ValueSet Description': guid_info['valueSet_description'],
                 'Code System': guid_info['code_system'],
@@ -318,10 +355,9 @@ def translate_emis_to_snomed(emis_guids, lookup_df, emis_guid_col, snomed_code_c
                 'SNOMED Code': snomed_code,
                 'SNOMED Description': description,
                 'Mapping Found': 'Found' if mapping_found else 'Not Found',
-                'Pseudo-Refset Member': 'No',
                 'Table Context': guid_info.get('table_context', 'N/A'),
                 'Column Context': guid_info.get('column_context', 'N/A')
-            }
+            })
             
             # Classify as clinical or medication based on XML codeSystem and context
             code_system = guid_info['code_system']

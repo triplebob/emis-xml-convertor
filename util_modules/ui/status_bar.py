@@ -58,31 +58,29 @@ def render_status_bar():
                                 st.caption(f"📘 {extract_date_raw}")
                 
                 # Changelog section - Direct in-app display 
-                with st.sidebar.expander("🎯 What's New - v2.0.0", expanded=False):
+                with st.sidebar.expander("🎯 What's New - v2.0.1", expanded=False):
                     st.markdown("""
-                    **🔧 Complete Application Rebuild**
+                    **⚡ Performance & UI Improvements**
                     
-                    The Unofficial EMIS XML Toolkit represents a complete transformation into a comprehensive EMIS XML analysis platform.
+                    Major performance optimizations and UI consistency improvements.
                     
-                    **📊 New 5-Tab Interface:**
-                    - **Clinical Codes**: Enhanced with refset support
-                    - **Search Analysis**: Rule logic browser (NEW)
-                    - **List Reports**: Column structure analysis (NEW)  
-                    - **Audit Reports**: Multi-population analysis (NEW)
-                    - **Aggregate Reports**: Statistical analysis (NEW)
+                    **🚀 Performance Enhancements:**
+                    - Unified pipeline caching (instant loading for refsets/pseudo-refsets)
+                    - Streamlit compatibility updates (eliminated deprecation warnings)
+                    - Consistent search counting across all tabs
                     
-                    **🔍 Advanced Features:**
-                    - Folder navigation and dependency visualization
-                    - Complex EMIS pattern support (baseCriteriaGroup, linked criteria)
-                    - SNOMED refset handling with direct code translation
-                    - Comprehensive export system (Excel, CSV, JSON)
+                    **🎨 UI/UX Improvements:**
+                    - Enhanced filter logic display
+                    - Improved dependency tree clarity (root vs branch searches)
+                    - One-click immediate downloads (eliminated page refresh issues)
                     
-                    **⚡ Performance:**
-                    - Single XML parse (eliminates redundant processing)
-                    - Dictionary-based lookups (100x faster)
-                    - Progress tracking for large files
+                    **🔧 Technical Fixes:**
+                    - Fixed Rule Logic Browser functionality 
+                    - Consistent search metrics (Analytics: 36, Dependencies: 31+5, Rule Browser: 36)
+                    - Updated comprehensive module documentation
+                    - Enhanced filter hierarchy display (Filters → Additional Filters)
                     
-                    ✅ **No Breaking Changes** - All existing workflows preserved
+                    ✅ **All improvements maintain full backward compatibility**
                     """)
                     st.markdown("**[📄 View Full Technical Changelog](https://github.com/triplebob/emis-xml-convertor/blob/main/changelog.md)**")
                 

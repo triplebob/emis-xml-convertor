@@ -307,7 +307,6 @@ def _parse_criteria_group(group_elem, namespaces) -> Optional[CriteriaGroup]:
         ns = NamespaceHandler()
         group_id = ns.find(group_elem, 'id')
         group_id_text = group_id.text if group_id is not None else "Unknown"
-        print(f"DEBUG: Processing criteria group: {group_id_text}")
         definition_elem = ns.find(group_elem, 'definition')
         action_true_elem = ns.find(group_elem, 'actionIfTrue')
         action_false_elem = ns.find(group_elem, 'actionIfFalse')
@@ -327,19 +326,15 @@ def _parse_criteria_group(group_elem, namespaces) -> Optional[CriteriaGroup]:
         
         # Parse population criteria (references to other reports)
         population_criteria = []
-        print(f"DEBUG: Processing criteria group, definition_elem found: {definition_elem is not None}")
         
         # Check both namespaced and non-namespaced elements
         namespaced_pop_criteria = definition_elem.findall('.//emis:populationCriterion', namespaces)
         non_namespaced_pop_criteria = definition_elem.findall('.//populationCriterion')
         all_pop_criteria = non_namespaced_pop_criteria + [p for p in namespaced_pop_criteria if p not in non_namespaced_pop_criteria]
-        print(f"DEBUG: Found {len(namespaced_pop_criteria)} namespaced + {len(non_namespaced_pop_criteria)} non-namespaced = {len(all_pop_criteria)} total populationCriterion elements")
         
         for pop_criterion_elem in all_pop_criteria:
             report_guid = pop_criterion_elem.get('reportGuid')
             criterion_id = pop_criterion_elem.get('id', '')
-            print(f"DEBUG: Found populationCriterion - id: '{criterion_id}', reportGuid: '{report_guid}'")
-            print(f"DEBUG: Element attributes: {pop_criterion_elem.attrib}")
             if report_guid:
                 population_criteria.append(PopulationCriterion(
                     id=criterion_id,

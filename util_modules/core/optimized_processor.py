@@ -323,7 +323,7 @@ class OptimizedProcessor:
         
         list_reports_df = get_list_reports_data()
         if list_reports_df is not None and not list_reports_df.empty:
-            st.dataframe(list_reports_df, use_container_width=True)
+            st.dataframe(list_reports_df, width='stretch')
         else:
             st.info("No list reports found in the XML file")
     
@@ -349,7 +349,7 @@ class OptimizedProcessor:
         
         audit_reports_df = get_audit_reports_data()
         if audit_reports_df is not None and not audit_reports_df.empty:
-            st.dataframe(audit_reports_df, use_container_width=True)
+            st.dataframe(audit_reports_df, width='stretch')
         else:
             st.info("No audit reports found in the XML file")
     
@@ -375,7 +375,7 @@ class OptimizedProcessor:
         
         aggregate_reports_df = get_aggregate_reports_data()
         if aggregate_reports_df is not None and not aggregate_reports_df.empty:
-            st.dataframe(aggregate_reports_df, use_container_width=True)
+            st.dataframe(aggregate_reports_df, width='stretch')
         else:
             st.info("No aggregate reports found in the XML file")
     

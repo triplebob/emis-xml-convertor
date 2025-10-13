@@ -128,42 +128,78 @@ streamlit run streamlit_app.py
 ```
 emis-xml-convertor/
 ├── streamlit_app.py           # Main application entry point
-├── xml_utils.py               # Core XML parsing and GUID extraction
 ├── requirements.txt           # Python dependencies
+├── changelog.md               # Version history and improvements
 ├── util_modules/              # Modular application architecture
 │   ├── analysis/              # Analysis engines and orchestration
-│   │   ├── xml_element_classifier.py    # Element type classification
 │   │   ├── analysis_orchestrator.py     # Central analysis coordination
+│   │   ├── xml_element_classifier.py    # Element type classification
+│   │   ├── xml_structure_analyzer.py    # Compatibility interface
 │   │   ├── search_analyzer.py           # Search logic analysis
+│   │   ├── search_rule_analyzer.py      # Legacy search analysis
 │   │   ├── report_analyzer.py           # Report structure analysis
-│   │   └── search_rule_visualizer.py    # Interactive rule displays
+│   │   ├── common_structures.py         # Shared data structures
+│   │   ├── performance_optimizer.py     # Performance monitoring
+│   │   ├── search_rule_visualizer.py    # Interactive rule displays
+│   │   ├── report_structure_visualizer.py # Report visualization
+│   │   ├── shared_render_utils.py       # Common visualization utilities
+│   │   └── linked_criteria_handler.py   # Linked criteria processing
 │   ├── xml_parsers/           # Modular XML parsing system
+│   │   ├── xml_utils.py                 # Core fallback option for parsing and GUID extraction
 │   │   ├── namespace_handler.py         # Universal namespace handling
 │   │   ├── base_parser.py               # Base parsing utilities
 │   │   ├── criterion_parser.py          # Search criteria parsing
 │   │   ├── report_parser.py             # Report structure parsing
-│   │   └── value_set_parser.py          # Clinical code value sets
+│   │   ├── value_set_parser.py          # Clinical code value sets
+│   │   ├── restriction_parser.py        # Search restrictions parsing
+│   │   └── linked_criteria_parser.py    # Linked criteria parsing
 │   ├── core/                  # Business logic and classification
 │   │   ├── translator.py                # GUID to SNOMED translation
 │   │   ├── report_classifier.py         # EMIS report type classification
-│   │   └── search_manager.py            # Search data management
+│   │   ├── folder_manager.py            # Folder hierarchy management
+│   │   ├── search_manager.py            # Search data management
+│   │   ├── background_processor.py      # Background processing
+│   │   └── optimized_processor.py       # Processing integration
 │   ├── ui/                    # User interface components
-│   │   ├── ui_tabs.py                   # 5-tab results interface
+│   │   ├── ui_tabs.py                   # Main results interface
 │   │   ├── status_bar.py                # Application status display
-│   │   └── rendering_utils.py           # Standardized UI components
+│   │   ├── ui_helpers.py                # Reusable UI components
+│   │   ├── rendering_utils.py           # Standard UI components
+│   │   ├── layout_utils.py              # Complex layout management
+│   │   ├── progressive_loader.py        # Progressive loading components
+│   │   ├── async_components.py          # Asynchronous UI components
+│   │   └── tabs/               # Modular tab structure
+│   │       ├── clinical_tabs.py         # Clinical data tab rendering
+│   │       ├── analysis_tabs.py         # Analysis tab rendering
+│   │       ├── analytics_tab.py         # Analytics display
+│   │       ├── report_tabs.py           # Report tab rendering
+│   │       ├── tab_helpers.py           # Shared tab utilities
+│   │       ├── base_tab.py              # Tab base classes
+│   │       ├── field_mapping.py         # Universal field mapping
+│   │       └── common_imports.py        # Shared imports
 │   ├── export_handlers/       # Comprehensive export system
+│   │   ├── ui_export_manager.py         # Export coordination
 │   │   ├── search_export.py             # Search-specific exports
 │   │   ├── report_export.py             # Report export handler
+│   │   ├── rule_export.py               # Individual rule export
 │   │   └── clinical_code_export.py      # Clinical code exports
 │   ├── utils/                 # General utilities
 │   │   ├── lookup.py                    # Lookup table management
-│   │   └── audit.py                     # Processing statistics
-│   └── common/                # Shared utilities and error handling
+│   │   ├── audit.py                     # Processing statistics
+│   │   ├── text_utils.py                # Text processing utilities
+│   │   ├── debug_logger.py              # Development tools
+│   │   └── github_loader.py             # External data loading
+│   └── common/                # Shared utilities and infrastructure
+│       ├── error_handling.py            # Standardized error management
+│       ├── ui_error_handling.py         # UI error display
+│       ├── export_utils.py              # Centralized export utilities
+│       └── dataframe_utils.py           # DataFrame operations
 ├── docs/                      # Technical documentation
 │   ├── modules.md                       # Module architecture guide
 │   ├── emis-xml-patterns.md             # EMIS XML pattern reference
 │   └── namespace-handling.md            # Namespace handling guide
 └── tests/                     # Test suite
+    └── test_performance.py              # Performance testing
 ```
 
 ---
@@ -272,5 +308,5 @@ This toolkit is provided without warranty of any kind. Healthcare professionals 
 ---
 
 *Last Updated: October 2025*  
-*Application Version: 2.0.0*  
+*Application Version: 2.0.1*  
 *Live Application: https://emis-xml-toolkit.streamlit.app/*

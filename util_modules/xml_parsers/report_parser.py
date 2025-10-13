@@ -293,7 +293,10 @@ class ReportParser(XMLParserBase):
                                 'value': value.get('value', ''),
                                 'display_name': value.get('display_name', ''),
                                 'include_children': value.get('include_children', False),
-                                'is_refset': value.get('is_refset', False)
+                                'is_refset': value.get('is_refset', False),
+                                'code_system': value_set.get('code_system', ''),
+                                'valueSet_guid': value_set.get('id', ''),
+                                'valueSet_description': value_set.get('description', '')
                             }
                             value_set_data['values'].append(code_data)
                             criterion_data['clinical_codes'].append(code_data)

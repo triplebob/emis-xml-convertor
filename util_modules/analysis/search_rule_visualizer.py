@@ -6,7 +6,6 @@ Creates interactive visualization of EMIS search rules and logic
 import streamlit as st
 import pandas as pd
 import io
-import zipfile
 import re
 from datetime import datetime
 from .search_rule_analyzer import SearchRuleAnalysis
@@ -87,6 +86,7 @@ def render_detailed_rules(reports, analysis=None):
         reports: List of SearchReport objects (should be searches only, no list reports)
         analysis: Analysis object containing folder information (optional, will get from session state if not provided)
     """
+    
     if not reports:
         st.info("No detailed rules found")
         return
@@ -103,8 +103,10 @@ def render_detailed_rules(reports, analysis=None):
     if not hasattr(analysis, 'folders'):
         analysis.folders = []  # Set empty folders list for backward compatibility
     
+    
     # Build folder hierarchy for dropdown navigation
     folder_map = {f.id: f for f in analysis.folders} if analysis.folders else {}
+    
     folder_hierarchy = FolderManager.build_folder_hierarchy_for_dropdown(folder_map, reports, st.session_state.get('debug_mode', False))
     
     st.markdown("**📋 Navigate to Search for Detailed Rule Analysis:**")
@@ -112,10 +114,13 @@ def render_detailed_rules(reports, analysis=None):
     # Use side-by-side layout like report browsers
     col1, col2 = st.columns([1, 1])
     
+    
     with col1:
+        
         if folder_hierarchy:
             # Folder selection when folders exist
             folder_options = ["All Folders"] + list(folder_hierarchy.keys())
+            
             selected_folder_path = st.selectbox(
                 "📁 Select Folder",
                 options=folder_options,
@@ -132,6 +137,7 @@ def render_detailed_rules(reports, analysis=None):
             selected_folder_path = "All Searches (No Folders)"
     
     with col2:
+        
         # Get searches based on folder selection
         if folder_hierarchy and selected_folder_path != "All Folders" and selected_folder_path in folder_hierarchy:
             folder_searches = folder_hierarchy[selected_folder_path]['searches']
@@ -139,13 +145,15 @@ def render_detailed_rules(reports, analysis=None):
             # All searches (either no folders or "All Folders" selected)
             folder_searches = reports
         
+        
         # Search selection dropdown
         if folder_searches:
             search_options = []
-            for search in folder_searches:
+            for i, search in enumerate(folder_searches):
                 clean_name = SearchManager.clean_search_name(search.name)
                 classification = "🔍"  # All items in search analysis are searches
                 search_options.append(f"{classification} {clean_name}")
+            
             
             selected_search_index = st.selectbox(
                 "🔍 Select Search for Details",
@@ -184,6 +192,7 @@ def render_detailed_rules(reports, analysis=None):
         render_individual_search_details(selected_search, reports, show_dependencies=False)
     else:
         st.info("👆 Select a search from the dropdown above or check 'Show All Searches' to see detailed rule analysis")
+    
 
 
 def _render_all_detailed_rules_simple(reports):
@@ -215,10 +224,10 @@ def _render_single_detailed_rule(selected_search, reports):
     with col1:
         st.markdown(f"### {classification} {clean_name}")
     with col2:
-        if st.button(f"📥 Export", key=f"export_{selected_search.id}", help="Export detailed breakdown for this search"):
-            # Get orchestrated analysis from session state
-            analysis = st.session_state.get('search_analysis')
-            if analysis:
+        # Get orchestrated analysis from session state
+        analysis = st.session_state.get('search_analysis')
+        if analysis:
+            try:
                 export_handler = SearchExportHandler(analysis)
                 
                 # Determine if this is a child search
@@ -230,14 +239,17 @@ def _render_single_detailed_rule(selected_search, reports):
                 )
                 
                 st.download_button(
-                    label="📥 Download Search Rule Analysis",
+                    label="📥 Export",
                     data=content,
                     file_name=filename,
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    help=f"Download comprehensive export for: {clean_name}"
+                    help=f"Download comprehensive export for: {clean_name}",
+                    key=f"export_{selected_search.id}"
                 )
-            else:
-                st.error("Analysis data not available for export")
+            except Exception as e:
+                st.error(f"Export functionality not available: {str(e)}")
+        else:
+            st.error("Analysis data not available for export")
     
     if selected_search.description:
         st.markdown("### 📋 Search Description")
@@ -303,7 +315,7 @@ def render_individual_search_details(selected_search, reports, show_dependencies
                 filename, content = export_handler.generate_search_export(selected_search, include_parent_info=True)
                 
                 st.download_button(
-                    label="📥 Download Search Rule Analysis",
+                    label="📥 Export",
                     data=content,
                     file_name=filename,
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -636,41 +648,6 @@ def render_search_criterion(criterion: SearchCriterion, criterion_name: str):
                             }
                         )
         
-        # Convert EMISINTERNAL codes to filter descriptions using display names
-        if emisinternal_value_sets:
-            st.markdown("**⚙️ Additional Filters:**")
-            for vs in emisinternal_value_sets:
-                vs_description = vs.get('description', '')
-                
-                # Use the value set description if available for context
-                if vs_description and vs_description.lower() not in ['', 'none']:
-                    filter_context = vs_description.lower()
-                else:
-                    filter_context = "internal classification"
-                
-                for value in vs['values']:
-                    display_name = value.get('display_name', '')
-                    code_value = value.get('value', '')
-                    
-                    # Use display name when available, fall back to code
-                    if display_name and display_name.strip():
-                        # Map common EMISINTERNAL codes to user-friendly descriptions
-                        if code_value.upper() == 'PROBLEM' and ('consultation' in filter_context or 'heading' in filter_context):
-                            st.caption(f"• Include Consultations where the consultation heading is: {display_name}")
-                        elif code_value.upper() in ['COMPLICATION', 'ONGOING', 'RESOLVED']:
-                            status_descriptions = {
-                                'COMPLICATION': f"Include complications only: {display_name}",
-                                'ONGOING': f"Include ongoing conditions: {display_name}",
-                                'RESOLVED': f"Include resolved conditions: {display_name}"
-                            }
-                            st.caption(f"• {status_descriptions.get(code_value.upper(), f'Include {filter_context}: {display_name}')}")
-                        else:
-                            st.caption(f"• Include {filter_context}: {display_name}")
-                    elif code_value:
-                        st.caption(f"• Include internal code: {code_value}")
-                    else:
-                        st.caption("• Include EMIS internal classification")
-        
         # Column filters (age, date restrictions, etc.) with smart deduplication
         # Filter out column filters that are used in linked criteria
         main_column_filters = filter_linked_column_filters_from_main(criterion)
@@ -741,6 +718,53 @@ def render_search_criterion(criterion: SearchCriterion, criterion_name: str):
                     filter_desc = render_column_filter(filters[0])
                     if filter_desc:
                         st.caption(f"• {filter_desc}")
+        
+        # Convert EMISINTERNAL codes to filter descriptions using display names
+        if emisinternal_value_sets:
+            st.markdown("**&nbsp;&nbsp;&nbsp;&nbsp;⚙️ Additional Filters:**")
+            for vs in emisinternal_value_sets:
+                vs_description = vs.get('description', '')
+                
+                # Use the value set description if available for context
+                if vs_description and vs_description.lower() not in ['', 'none']:
+                    filter_context = vs_description.lower()
+                else:
+                    filter_context = "internal classification"
+                
+                # Find the corresponding column filter to get the correct in_not_in value
+                column_filter_in_not_in = "IN"  # Default
+                for cf in main_column_filters:
+                    cf_value_sets = cf.get('value_sets', [])
+                    for cf_vs in cf_value_sets:
+                        if cf_vs.get('id') == vs.get('id'):
+                            column_filter_in_not_in = cf.get('in_not_in', 'IN')
+                            break
+                
+                for value in vs['values']:
+                    display_name = value.get('display_name', '')
+                    code_value = value.get('value', '')
+                    
+                    # Determine action based on in_not_in value
+                    action = "Include" if column_filter_in_not_in == "IN" else "Exclude"
+                    
+                    # Use display name when available, fall back to code
+                    if display_name and display_name.strip():
+                        # Map common EMISINTERNAL codes to user-friendly descriptions
+                        if code_value.upper() == 'PROBLEM' and ('consultation' in filter_context or 'heading' in filter_context):
+                            st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {action} Consultations where the consultation heading is: {display_name}")
+                        elif code_value.upper() in ['COMPLICATION', 'ONGOING', 'RESOLVED']:
+                            status_descriptions = {
+                                'COMPLICATION': f"{action} complications only: {display_name}",
+                                'ONGOING': f"{action} ongoing conditions: {display_name}",
+                                'RESOLVED': f"{action} resolved conditions: {display_name}"
+                            }
+                            st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {status_descriptions.get(code_value.upper(), f'{action} {filter_context}: {display_name}')}")
+                        else:
+                            st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {action} {filter_context}: {display_name}")
+                    elif code_value:
+                        st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {action} internal code: {code_value}")
+                    else:
+                        st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {action} EMIS internal classification")
         
         # Restrictions (Latest 1, etc.)
         if criterion.restrictions:
@@ -1088,6 +1112,14 @@ def render_complexity_analysis(metrics, analysis=None):
     # Quick fix: If we have access to search reports, count parameters
     if analysis is None:
         analysis = st.session_state.get('search_analysis')
+    
+    # Use the new unified pipeline to get correct search count (only if metrics shows 0 or is missing)
+    if metrics.get('total_searches', 0) == 0:
+        report_results = st.session_state.get('report_results')
+        if report_results and hasattr(report_results, 'report_breakdown'):
+            actual_search_count = len(report_results.report_breakdown.get('search', []))
+            # Update metrics with correct search count only if it was missing/zero
+            metrics['total_searches'] = actual_search_count
     
     if analysis and hasattr(analysis, 'orchestrated_results') and analysis.orchestrated_results:
         searches = analysis.orchestrated_results.searches

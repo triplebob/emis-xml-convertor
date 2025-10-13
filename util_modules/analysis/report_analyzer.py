@@ -10,6 +10,9 @@ from ..xml_parsers.criterion_parser import SearchCriterion, CriterionParser
 from ..xml_parsers.report_parser import ReportParser
 from ..xml_parsers.namespace_handler import NamespaceHandler
 from .common_structures import CriteriaGroup, PopulationCriterion, ReportFolder
+import sys
+import os
+from ..xml_parsers.xml_utils import is_pseudo_refset_from_xml_structure
 
 
 @dataclass
@@ -94,6 +97,14 @@ class ReportAnalyzer:
         self.report_parser = ReportParser()
         self.ns = NamespaceHandler()
     
+    def _is_medication_from_context(self, code_system, table_context, column_context):
+        """
+        Determine if a code is a medication based on code system and table/column context.
+        Uses the same logic as xml_utils.is_medication_code_system.
+        """
+        from ..xml_parsers.xml_utils import is_medication_code_system
+        return is_medication_code_system(code_system, table_context, column_context)
+    
     def analyze_reports(self, report_elements: List[ET.Element], namespaces: Dict, folders: List[ReportFolder] = None) -> ReportAnalysisResult:
         """
         Analyze pre-filtered report elements (List/Audit/Aggregate)
@@ -134,6 +145,9 @@ class ReportAnalyzer:
             )
             
         except Exception as e:
+            print(f"DEBUG: Exception in analyze_reports: {e}")
+            import traceback
+            traceback.print_exc()
             raise Exception(f"Error analyzing reports: {str(e)}")
     
     def _parse_report_elements(self, report_elements: List[ET.Element], namespaces: Dict, folders: List[ReportFolder] = None) -> List[Report]:
@@ -418,30 +432,186 @@ class ReportAnalyzer:
         
         return grouped
     
+    def _extract_codes_from_criterion(self, criterion, report) -> List[Dict]:
+        """Extract codes from a single criterion, including nested testAttribute sections"""
+        codes = []
+        
+        # Extract codes from main value sets
+        # criterion is a SearchCriterion object, so use attribute access
+        value_sets = getattr(criterion, 'value_sets', [])
+        if not isinstance(value_sets, list):
+            value_sets = []
+            
+        for value_set in value_sets:
+            # value_set is a ValueSet object with attribute access
+            values = getattr(value_set, 'values', [])
+            # If values is a method, call it; if it's already data, use it
+            if callable(values):
+                values = values()
+            if not isinstance(values, list):
+                values = []
+                
+            code_system = getattr(value_set, 'code_system', '')
+            guid = getattr(value_set, 'guid', '')
+            description = getattr(value_set, 'description', '')
+            
+            
+            for value in values:
+                # value is a dict-like object
+                codes.append({
+                    'source_report_id': report.id,
+                    'source_report_name': report.name,
+                    'source_report_type': report.report_type,
+                    'code_value': value.get('value', '') if hasattr(value, 'get') else getattr(value, 'value', ''),
+                    'display_name': value.get('display_name', '') if hasattr(value, 'get') else getattr(value, 'display_name', ''),
+                    'code_system': code_system,
+                    'include_children': value.get('include_children', False) if hasattr(value, 'get') else getattr(value, 'include_children', False),
+                    'is_refset': value.get('is_refset', False) if hasattr(value, 'get') else getattr(value, 'is_refset', False),
+                    'is_pseudorefset': value.get('is_pseudorefset', False) if hasattr(value, 'get') else getattr(value, 'is_pseudorefset', False),
+                    'is_pseudomember': value.get('is_pseudomember', False) if hasattr(value, 'get') else getattr(value, 'is_pseudomember', False),
+                    'valueSet_guid': guid,
+                    'valueSet_description': description,
+                    'is_medication': self._is_medication_from_context(
+                        code_system,
+                        getattr(report, 'logical_table', ''),
+                        ''  # No column context available at this level
+                    ),
+                    'source_type': 'report',
+                    'report_type': report.report_type,
+                    'valueset_guid': guid,
+                    'valueset_description': description,
+                    'table': getattr(report, 'logical_table', ''),
+                    'logical_table': getattr(report, 'logical_table', '')
+                })
+        
+        # Note: testAttribute value sets are now extracted by the XML parser
+        # and included in criterion.value_sets, so no separate extraction needed
+        
+        # Also extract from baseCriteriaGroup nested structures
+        # Pattern: <criterion><baseCriteriaGroup><definition><criteria><criterion>
+        base_groups = getattr(criterion, 'base_criteria_groups', [])
+        if not isinstance(base_groups, list):
+            base_groups = [base_groups] if base_groups else []
+            
+        for base_group in base_groups:
+            # base_group should have a definition attribute
+            definition = getattr(base_group, 'definition', None)
+            if definition:
+                nested_criteria = getattr(definition, 'criteria', [])
+                if not isinstance(nested_criteria, list):
+                    nested_criteria = [nested_criteria] if nested_criteria else []
+                    
+                for nested_criterion in nested_criteria:
+                    # Recursively extract codes from nested criteria
+                    nested_codes = self._extract_codes_from_criterion(nested_criterion, report)
+                    # Mark these as coming from nested baseCriteriaGroup
+                    for nested_code in nested_codes:
+                        nested_code['from_base_criteria_group'] = True
+                    codes.extend(nested_codes)
+        
+        return codes
+
     def _extract_clinical_codes_from_reports(self, reports: List[Report]) -> List[Dict]:
         """Extract all clinical codes from reports for analysis"""
         clinical_codes = []
         
         for report in reports:
-            # Extract codes from criteria groups
+            # Extract codes from criteria groups (main report criteria)
             for group in report.criteria_groups:
                 for criterion in group.criteria:
-                    for value_set in criterion.value_sets:
-                        for value in value_set.get('values', []):
-                            clinical_codes.append({
-                                'source_report_id': report.id,
-                                'source_report_name': report.name,
-                                'source_report_type': report.report_type,
-                                'code_value': value.get('value', ''),
-                                'display_name': value.get('display_name', ''),
-                                'code_system': value_set.get('code_system', ''),
-                                'include_children': value.get('include_children', False),
-                                'is_refset': value.get('is_refset', False),
-                                'source_type': value.get('source_type', 'report'),
-                                'report_type': value.get('report_type', report.report_type)
-                            })
+                    codes = self._extract_codes_from_criterion(criterion, report)
+                    clinical_codes.extend(codes)
+            
+            # Extract codes from column groups (List Report column criteria)
+            for column_group in report.column_groups:
+                # Column groups are dictionaries, not objects
+                if column_group.get('has_criteria') and column_group.get('criteria_details'):
+                    criteria_details = column_group['criteria_details']
+                    
+                    # Extract codes from individual criteria within criteria_details
+                    if 'criteria' in criteria_details:
+                        for criterion in criteria_details['criteria']:
+                            if 'clinical_codes' in criterion:
+                                # Use the pre-extracted clinical codes from the report parser
+                                for clinical_code in criterion['clinical_codes']:
+                                    clinical_codes.append({
+                                        'source_report_id': report.id,
+                                        'source_report_name': report.name,
+                                        'source_report_type': report.report_type,
+                                        'code_value': clinical_code.get('value', ''),
+                                        'display_name': clinical_code.get('display_name', ''),
+                                        'code_system': clinical_code.get('code_system', ''),
+                                        'include_children': clinical_code.get('include_children', False),
+                                        'is_refset': clinical_code.get('is_refset', False),
+                                        'is_pseudorefset': clinical_code.get('is_pseudorefset', False),
+                                        'is_pseudomember': clinical_code.get('is_pseudomember', False),
+                                        'valueSet_guid': clinical_code.get('valueSet_guid', ''),
+                                        'valueSet_description': clinical_code.get('valueSet_description', ''),
+                                        'is_medication': self._is_medication_from_context(
+                                            clinical_code.get('code_system', ''),
+                                            column_group.get('logical_table', ''),
+                                            column_group.get('column_group_name', '')  # Use column name as context
+                                        ),
+                                        'source_type': 'report',
+                                        'report_type': report.report_type,
+                                        'column_group_name': column_group.get('display_name', ''),
+                                        'logical_table': column_group.get('logical_table', ''),
+                                        'table': column_group.get('logical_table', ''),
+                                        'from_column_group': True
+                                    })
+        
+        # Post-process clinical codes to detect pseudo-refsets by grouping by valueSet
+        self._apply_pseudo_refset_detection(clinical_codes)
         
         return clinical_codes
+    
+    def _apply_pseudo_refset_detection(self, clinical_codes: List[Dict]) -> None:
+        """Apply pseudo-refset detection by grouping codes by valueSet and analyzing structure"""
+        # Group codes by valueSet GUID
+        valueset_groups = {}
+        for code in clinical_codes:
+            valueset_guid = code.get('valueSet_guid', '')
+            if valueset_guid and valueset_guid != '':
+                if valueset_guid not in valueset_groups:
+                    valueset_groups[valueset_guid] = []
+                valueset_groups[valueset_guid].append(code)
+        
+        
+        # Analyze each valueSet group for pseudo-refset pattern
+        for valueset_guid, codes in valueset_groups.items():
+            if len(codes) <= 1:
+                continue  # Skip single-code valuesets - can't be pseudo-refsets
+            
+            # Deduplicate codes by code_value within this valueSet (same code may appear in multiple reports)
+            unique_codes = {}
+            for code in codes:
+                code_value = code.get('code_value', '')
+                if code_value not in unique_codes:
+                    unique_codes[code_value] = code
+            
+            deduped_codes = list(unique_codes.values())
+            
+            # Check if this valueSet has the pseudo-refset pattern:
+            # One unique code with is_refset=True + other unique codes (members)
+            refset_codes = [c for c in deduped_codes if c.get('is_refset', False)]
+            member_codes = [c for c in deduped_codes if not c.get('is_refset', False)]
+            
+            if len(refset_codes) == 1 and len(member_codes) > 0:
+                # This is a pseudo-refset pattern!
+                
+                # Get the code values that should be flagged
+                refset_code_values = {c.get('code_value', '') for c in refset_codes}
+                member_code_values = {c.get('code_value', '') for c in member_codes}
+                
+                # Apply flags to ALL instances of these codes in this valueSet (across all reports)
+                for code in codes:
+                    code_value = code.get('code_value', '')
+                    if code_value in refset_code_values:
+                        code['is_pseudorefset'] = True
+                        code['is_pseudomember'] = False
+                    elif code_value in member_code_values:
+                        code['is_pseudorefset'] = False
+                        code['is_pseudomember'] = True
     
     def _calculate_report_complexity(self, reports: List[Report]) -> Dict[str, Any]:
         """Calculate complexity metrics for reports"""

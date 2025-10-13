@@ -6,7 +6,6 @@ Centralizes and enhances export functionality across all UI tabs
 import streamlit as st
 import pandas as pd
 import io
-import zipfile
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Callable
 from .clinical_code_export import ClinicalCodeExportHandler
@@ -111,23 +110,8 @@ class UIExportManager:
         with col2:
             st.markdown("**Bulk Export Options:**")
             
-            # All searches comprehensive export - direct download
-            zip_buffer = self._create_bulk_search_export(analysis, xml_filename)
-            if zip_buffer:
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-                # Create descriptive filename based on XML file and content
-                base_name = xml_filename.replace('.xml', '').replace(' ', '_')
-                search_count = len([r for r in analysis.reports if not hasattr(r, 'report_type')])
-                report_count = len([r for r in analysis.reports if hasattr(r, 'report_type')])
-                filename = f"{base_name}_Complete_Export_{search_count}searches_{report_count}reports_{timestamp}.zip"
-                st.download_button(
-                    label="📦 Export All Searches (ZIP)",
-                    data=zip_buffer.getvalue(),
-                    file_name=filename,
-                    mime="application/zip",
-                    key="export_all_searches"
-                )
-            
+            # Bulk ZIP export removed due to memory performance issues
+            st.info("🔄 Bulk ZIP export has been removed due to memory performance issues. Individual exports are available above.")
     
     def _render_export_button(self, data: List[Dict], section_name: str, 
                             export_type: str, additional_context: Dict = None):
@@ -219,58 +203,6 @@ class UIExportManager:
                 for system in stats['code_systems']:
                     st.text(f"• {system}")
     
-    def _create_bulk_search_export(self, analysis, xml_filename: str):
-        """Create bulk export of all searches and return ZIP buffer"""
-        if not analysis or not hasattr(analysis, 'reports') or not analysis.reports:
-            return None
-            
-        if not self.search_export:
-            # Create search export handler if it doesn't exist
-            from .search_export import SearchExportHandler
-            self.search_export = SearchExportHandler(analysis)
-            
-        # Create ZIP file with all searches
-        zip_buffer = io.BytesIO()
-        
-        try:
-            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-                # Get separate search and report results from session state
-                import streamlit as st
-                search_results = st.session_state.get('search_results')
-                report_results = st.session_state.get('report_results')
-                
-                # Export searches using search_results
-                if search_results and hasattr(search_results, 'searches'):
-                    # Create fresh search export handler with search_results
-                    from .search_export import SearchExportHandler
-                    search_export = SearchExportHandler(analysis)  # Still needs analysis for folder info
-                    
-                    for search in search_results.searches:
-                        include_parent_info = hasattr(search, 'parent_guid') and search.parent_guid is not None
-                        try:
-                            filename, content = search_export.generate_search_export(search, include_parent_info)
-                            zip_file.writestr(filename, content)
-                        except Exception:
-                            continue  # Skip failed exports
-                
-                # Export reports using report_results
-                if report_results and hasattr(report_results, 'reports'):
-                    # Create fresh report export handler with analysis for folder info
-                    from .report_export import ReportExportHandler
-                    report_export = ReportExportHandler(analysis)
-                    
-                    for report in report_results.reports:
-                        include_parent_info = hasattr(report, 'parent_guid') and report.parent_guid is not None
-                        try:
-                            filename, content = report_export.generate_report_export(report, include_parent_info)
-                            zip_file.writestr(filename, content)
-                        except Exception:
-                            continue  # Skip failed exports
-            
-            zip_buffer.seek(0)
-            return zip_buffer
-        except Exception:
-            return None
     
     
     def render_analytics_export(self, audit_stats: Dict[str, Any]):

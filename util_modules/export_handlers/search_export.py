@@ -4,7 +4,6 @@ Handles detailed per-search export functionality with comprehensive breakdowns
 """
 
 import io
-import zipfile
 from datetime import datetime
 import pandas as pd
 from typing import List, Dict, Any, Optional

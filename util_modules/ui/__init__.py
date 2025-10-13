@@ -30,8 +30,14 @@ from .layout_utils import (
     TreeRenderer
 )
 
-# Import functions from moved UI modules
-from .ui_tabs import render_xml_structure_tabs, render_results_tabs
+# Import functions from moved UI modules - during refactoring, use fallback imports
+try:
+    # Try new modular structure first
+    from .tabs import render_results_tabs, render_xml_structure_tabs
+except ImportError:
+    # Fallback to original ui_tabs during transition
+    from .ui_tabs import render_xml_structure_tabs, render_results_tabs
+
 from .status_bar import render_status_bar
 from .ui_helpers import render_info_section
 

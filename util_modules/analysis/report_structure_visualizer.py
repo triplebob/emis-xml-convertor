@@ -6,7 +6,6 @@ Contains functions for visualizing folder hierarchies and dependency relationshi
 import streamlit as st
 import pandas as pd
 import io
-import zipfile
 import re
 from datetime import datetime
 from ..core import ReportClassifier, SearchManager
@@ -52,7 +51,7 @@ def render_folder_structure(folder_tree, folders, reports):
     st.markdown("---")
     st.markdown("**📥 Export Options:**")
     
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
     
     with col1:
         if st.button("📄 Download Tree View (TXT)", key="download_tree_txt"):
@@ -61,10 +60,6 @@ def render_folder_structure(folder_tree, folders, reports):
     with col2:
         if st.button("📊 Download Detailed View (CSV)", key="download_detailed_csv"):
             _download_detailed_as_csv(folder_tree, folder_map, report_map)
-    
-    with col3:
-        if st.button("📦 Download Both (ZIP)", key="download_both_zip"):
-            _download_both_as_zip(folder_tree, folder_map, report_map, tree_text)
 
 
 def _download_tree_as_txt(tree_text):
@@ -101,31 +96,6 @@ def _download_detailed_as_csv(folder_tree, folder_map, report_map):
     )
 
 
-def _download_both_as_zip(folder_tree, folder_map, report_map, tree_text):
-    """Download both formats in a ZIP file"""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    zip_buffer = io.BytesIO()
-    
-    with zipfile.ZipFile(zip_buffer, 'w') as zip_file:
-        # Add tree text file
-        txt_content = f"Folder Structure - Generated {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-        txt_content += "=" * 80 + "\n\n"
-        txt_content += tree_text
-        zip_file.writestr(f"folder_structure_{timestamp}.txt", txt_content)
-        
-        # Add CSV file
-        csv_data = _generate_folder_csv_data(folder_tree, folder_map, report_map)
-        df = pd.DataFrame(csv_data)
-        csv_content = df.to_csv(index=False)
-        zip_file.writestr(f"folder_details_{timestamp}.csv", csv_content)
-    
-    st.download_button(
-        label="📥 Download Both (ZIP)",
-        data=zip_buffer.getvalue(),
-        file_name=f"folder_structure_complete_{timestamp}.zip",
-        mime="application/zip",
-        key="zip_download_btn"
-    )
 
 
 def generate_folder_tree_ascii(folder_tree, folder_map, report_map):
@@ -476,10 +446,12 @@ def generate_dependency_tree_ascii(dependency_tree, report_map, show_circular=Tr
     summary_parts = []
     if composition['root_searches'] > 0:
         summary_parts.append(f"{composition['root_searches']} root searches")
+    if composition['branch_searches'] > 0:
+        summary_parts.append(f"{composition['branch_searches']} branch searches")
     if composition['root_reports'] > 0:
         summary_parts.append(f"{composition['root_reports']} root reports")
     
-    summary = " + ".join(summary_parts) if summary_parts else "0 root items"
+    summary = ", ".join(summary_parts) if summary_parts else "0 root items"
     
     lines.append(f"🔗 {summary}, spanning {composition['folder_count']} folders, max depth: {composition['max_depth']}")
     lines.append("")
@@ -598,10 +570,12 @@ def render_dependency_list_view(dependency_tree, report_map, show_circular):
     summary_parts = []
     if composition['root_searches'] > 0:
         summary_parts.append(f"{composition['root_searches']} root searches")
+    if composition['branch_searches'] > 0:
+        summary_parts.append(f"{composition['branch_searches']} branch searches")
     if composition['root_reports'] > 0:
         summary_parts.append(f"{composition['root_reports']} root reports")
     
-    summary = " + ".join(summary_parts) if summary_parts else "0 root items"
+    summary = ", ".join(summary_parts) if summary_parts else "0 root items"
     
     st.info(f"🔗 {summary}, spanning {composition['folder_count']} folders, max dependency depth: {composition['max_depth']}")
     
@@ -652,29 +626,6 @@ def _handle_folder_export(export_format, folder_tree, folder_map, report_map, tr
             mime="text/csv"
         )
     
-    elif export_format == "Both (ZIP)":
-        # Export both formats in a ZIP
-        zip_buffer = io.BytesIO()
-        
-        with zipfile.ZipFile(zip_buffer, 'w') as zip_file:
-            # Add tree text file
-            txt_content = f"Folder Structure - Generated {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-            txt_content += "=" * 80 + "\n\n"
-            txt_content += tree_text
-            zip_file.writestr(f"folder_structure_{timestamp}.txt", txt_content)
-            
-            # Add CSV file
-            csv_data = _generate_folder_csv_data(folder_tree, folder_map, report_map)
-            df = pd.DataFrame(csv_data)
-            csv_content = df.to_csv(index=False)
-            zip_file.writestr(f"folder_details_{timestamp}.csv", csv_content)
-        
-        st.download_button(
-            label="📥 Download Both (ZIP)",
-            data=zip_buffer.getvalue(),
-            file_name=f"folder_export_{timestamp}.zip",
-            mime="application/zip"
-        )
 
 
 def _generate_folder_csv_data(folder_tree, folder_map, report_map):
@@ -862,24 +813,6 @@ def _generate_complete_dependency_analysis(dependency_tree, report_map, show_cir
     return "\n".join(output_lines)
 
 
-def _create_dependency_zip_export(dependency_tree, report_map, show_circular, tree_text):
-    """Create ZIP file containing both tree and CSV exports"""
-    zip_buffer = io.BytesIO()
-    
-    try:
-        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-            # Add tree file
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M')
-            zip_file.writestr(f"dependency_tree_{timestamp}.txt", tree_text)
-            
-            # Add CSV file
-            csv_data = _generate_dependency_csv_data(dependency_tree, report_map, show_circular)
-            zip_file.writestr(f"dependency_details_{timestamp}.csv", csv_data)
-        
-        zip_buffer.seek(0)
-        return zip_buffer.getvalue()
-    except Exception:
-        return None
 
 
 def _handle_dependency_export(export_format, dependency_tree, report_map, show_circular, tree_text):
@@ -914,29 +847,6 @@ def _handle_dependency_export(export_format, dependency_tree, report_map, show_c
             mime="text/csv"
         )
     
-    elif export_format == "Both (ZIP)":
-        # Export both formats in a ZIP
-        zip_buffer = io.BytesIO()
-        
-        with zipfile.ZipFile(zip_buffer, 'w') as zip_file:
-            # Add tree text file
-            txt_content = f"Dependency Tree - Generated {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-            txt_content += "=" * 80 + "\n\n"
-            txt_content += tree_text
-            zip_file.writestr(f"dependency_tree_{timestamp}.txt", txt_content)
-            
-            # Add CSV file
-            csv_data = _generate_dependency_csv_data(dependency_tree, report_map, show_circular)
-            df = pd.DataFrame(csv_data)
-            csv_content = df.to_csv(index=False)
-            zip_file.writestr(f"dependency_details_{timestamp}.csv", csv_content)
-        
-        st.download_button(
-            label="📥 Download Both (ZIP)",
-            data=zip_buffer.getvalue(),
-            file_name=f"dependency_export_{timestamp}.zip",
-            mime="application/zip"
-        )
 
 
 def _analyze_dependency_composition(dependency_tree, report_map):
@@ -947,6 +857,7 @@ def _analyze_dependency_composition(dependency_tree, report_map):
         'reports': 0,
         'root_searches': 0,
         'root_reports': 0,
+        'branch_searches': 0,
         'folders': set(),
         'max_depth': dependency_tree.get('max_depth', 0)
     }
@@ -970,6 +881,8 @@ def _analyze_dependency_composition(dependency_tree, report_map):
                 composition['searches'] += 1
                 if level == 0:
                     composition['root_searches'] += 1
+                else:
+                    composition['branch_searches'] += 1
             else:
                 composition['reports'] += 1
                 if level == 0:
@@ -979,6 +892,8 @@ def _analyze_dependency_composition(dependency_tree, report_map):
             composition['searches'] += 1
             if level == 0:
                 composition['root_searches'] += 1
+            else:
+                composition['branch_searches'] += 1
         
         # Track folders
         if node.get('folder_path'):

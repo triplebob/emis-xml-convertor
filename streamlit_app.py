@@ -4,7 +4,7 @@ The Unofficial EMIS XML Toolkit - Streamlit Cloud Optimized
 
 import streamlit as st
 from util_modules.ui import render_status_bar, render_results_tabs
-from xml_utils import parse_xml_for_emis_guids
+from util_modules.xml_parsers.xml_utils import parse_xml_for_emis_guids
 from util_modules.core import translate_emis_to_snomed
 from util_modules.analysis.search_analyzer import SearchAnalyzer
 from util_modules.analysis.report_analyzer import ReportAnalyzer
@@ -240,7 +240,7 @@ def main():
             if st.session_state.get('last_processed_file') != current_file_info:
                 # New file detected - clear all previous results
                 keys_to_clear = ['results', 'xml_filename', 'audit_stats', 'xml_content', 
-                               'search_analysis', 'search_results', 'report_results', 'is_processing']
+                               'search_analysis', 'search_results', 'report_results', 'is_processing', 'unified_clinical_data_cache']
                 for key in keys_to_clear:
                     if key in st.session_state:
                         del st.session_state[key]
@@ -266,6 +266,8 @@ def main():
                         del st.session_state.audit_stats
                     if 'xml_content' in st.session_state:
                         del st.session_state.xml_content
+                    if 'unified_clinical_data_cache' in st.session_state:
+                        del st.session_state.unified_clinical_data_cache
                     
                     st.session_state.is_processing = True
                     st.rerun()
@@ -457,19 +459,23 @@ def main():
                         if pseudo_refset_count > 0:
                             breakdown_parts.append(f"{pseudo_refset_count} pseudo-refsets")
                         
+                        # PERFORMANCE FIX: Use simple toast without expensive analysis operations
                         # Quick structure analysis for toast
                         try:
-                            from util_modules.analysis.xml_structure_analyzer import analyze_search_rules
-                            from util_modules.core import ReportClassifier
-                            analysis = analyze_search_rules(xml_content)
-                            folder_count = len(analysis.folders) if analysis.folders else 0
-                            report_type_counts = ReportClassifier.get_report_type_counts(analysis.reports)
-                            total_reports = report_type_counts['Total Reports']
-                            
-                            breakdown_text = ", ".join(breakdown_parts) if breakdown_parts else "items"
-                            st.toast(f"Processing complete! Found {len(emis_guids)} GUIDs • {total_reports} reports • {folder_count} folders • {total_display_items} clinical items", icon="✅")
+                            # Use already computed analysis from session state
+                            analysis = st.session_state.get('xml_structure_analysis')
+                            if analysis:
+                                folder_count = len(analysis.folders) if analysis.folders else 0
+                                total_reports = len(analysis.reports) if analysis.reports else 0
+                                
+                                breakdown_text = ", ".join(breakdown_parts) if breakdown_parts else "items"
+                                st.toast(f"Processing complete! Found {len(emis_guids)} GUIDs • {total_reports} reports • {folder_count} folders • {total_display_items} clinical items", icon="✅")
+                            else:
+                                # Fallback to simple message if analysis not available
+                                breakdown_text = ", ".join(breakdown_parts) if breakdown_parts else "items" 
+                                st.toast(f"Processing complete! Found {total_display_items} items: {breakdown_text}", icon="✅")
                         except Exception:
-                            # Fallback to original message if analysis fails
+                            # Fallback to original message if any issues
                             breakdown_text = ", ".join(breakdown_parts) if breakdown_parts else "items" 
                             st.toast(f"Processing complete! Found {total_display_items} items: {breakdown_text}", icon="✅")
                         

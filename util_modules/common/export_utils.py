@@ -4,7 +4,6 @@ Provides standardized Excel export functionality across the application
 """
 
 import io
-import zipfile
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Union, Tuple
 import pandas as pd
@@ -173,24 +172,6 @@ def save_workbook_to_bytes(writer: pd.ExcelWriter) -> bytes:
         return writer.handles.handle.getvalue()
 
 
-def create_zip_export(files: Dict[str, bytes], zip_filename: str) -> bytes:
-    """
-    Create a ZIP file containing multiple export files
-    
-    Args:
-        files: Dictionary of filename -> file_content (bytes)
-        zip_filename: Name for the ZIP file
-        
-    Returns:
-        bytes: ZIP file content as bytes
-    """
-    zip_buffer = io.BytesIO()
-    
-    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-        for filename, content in files.items():
-            zip_file.writestr(filename, content)
-    
-    return zip_buffer.getvalue()
 
 
 def standardize_dataframe_for_export(

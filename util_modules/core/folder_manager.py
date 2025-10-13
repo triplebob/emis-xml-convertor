@@ -199,14 +199,22 @@ class FolderManager:
         folder_groups = FolderManager.group_reports_by_folder(reports, folder_map)
         searches, list_reports = ReportClassifier.separate_searches_and_reports(reports)
         
+        # PERFORMANCE FIX: Pre-classify all reports once to avoid O(n²) explosion
+        # Build lookup sets for faster folder analysis
+        search_ids = {report.id for report in searches}
+        report_ids = {report.id for report in list_reports}
+        
         folders_with_searches = 0
         folders_with_reports = 0
         
         for folder_id, folder_reports in folder_groups.items():
-            folder_searches, folder_list_reports = ReportClassifier.separate_searches_and_reports(folder_reports)
-            if folder_searches:
+            # OPTIMIZED: Use O(1) set lookups instead of expensive ReportClassifier calls
+            folder_has_searches = any(report.id in search_ids for report in folder_reports)
+            folder_has_reports = any(report.id in report_ids for report in folder_reports)
+            
+            if folder_has_searches:
                 folders_with_searches += 1
-            if folder_list_reports:
+            if folder_has_reports:
                 folders_with_reports += 1
         
         return {
