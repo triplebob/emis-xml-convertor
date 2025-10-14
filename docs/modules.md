@@ -440,6 +440,31 @@ util_modules.export_handlers (specialized export handling)
 
 **When to modify:** Code export formats, new result categories.
 
+### `json_export_generator.py` - Search JSON Export
+**Purpose:** Generates structured JSON exports for search reports optimized for AI/LLM consumption.
+
+**Responsibilities:**
+- Search criteria extraction with SNOMED translations
+- Structured JSON format for programmatic use
+- Clinical code deduplication and filtering logic export
+- Filter constraints with actual values (age constraints, date filtering)
+- Unified clinical data pipeline integration
+
+**When to modify:** Search JSON structure changes, AI/LLM integration requirements.
+
+### `report_json_export_generator.py` - Report JSON Export
+**Purpose:** Comprehensive JSON export for List, Audit, and Aggregate reports with complete metadata.
+
+**Responsibilities:**
+- List Reports: Column structure, criteria details, restriction parsing
+- Audit Reports: Embedded criteria logic, organizational grouping
+- Aggregate Reports: Cross-tabulation structure, statistical configuration
+- Clinical terminology extraction with SNOMED translations
+- Restriction handling (Latest N records, conditional logic)
+- Report dependencies and parent search references
+
+**When to modify:** Report JSON structure changes, new report patterns, restriction logic updates.
+
 ## XML Parsing (`util_modules/xml_parsers/`)
 
 ### `namespace_handler.py` - Universal Namespace Handling

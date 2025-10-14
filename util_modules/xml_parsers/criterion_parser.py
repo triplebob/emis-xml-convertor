@@ -167,12 +167,38 @@ class CriterionParser(XMLParserBase):
             
             
             # Parse restrictions - handle both namespaced and non-namespaced
-            # Use more specific path to avoid duplicates from nested structures
+            # Look for restrictions in multiple paths: direct under criterion AND under filterAttribute > columnValue
             restrictions = []
+            
+            # Direct restrictions under criterion
             namespaced_restrictions = self.find_elements(criterion_elem, 'emis:restriction')
             non_namespaced_restrictions = criterion_elem.findall('restriction')
-            all_restrictions = non_namespaced_restrictions + [r for r in namespaced_restrictions if r not in non_namespaced_restrictions]
+            direct_restrictions = non_namespaced_restrictions + [r for r in namespaced_restrictions if r not in non_namespaced_restrictions]
             
+            # Restrictions under filterAttribute (for List Reports) - handle both patterns:
+            # Pattern 1: filterAttribute > columnValue > restriction
+            # Pattern 2: filterAttribute > restriction (as sibling to columnValue)
+            nested_restrictions = []
+            for filter_attr in filter_attrs:
+                # Pattern 1: restrictions under columnValue
+                namespaced_columns = self.find_elements(filter_attr, 'emis:columnValue')
+                non_namespaced_columns = filter_attr.findall('columnValue')
+                all_columns = non_namespaced_columns + [c for c in namespaced_columns if c not in non_namespaced_columns]
+                
+                for col_elem in all_columns:
+                    namespaced_rest = self.find_elements(col_elem, 'emis:restriction')
+                    non_namespaced_rest = col_elem.findall('restriction')
+                    col_restrictions = non_namespaced_rest + [r for r in namespaced_rest if r not in non_namespaced_rest]
+                    nested_restrictions.extend(col_restrictions)
+                
+                # Pattern 2: restrictions directly under filterAttribute (as siblings to columnValue)
+                namespaced_filter_rest = self.find_elements(filter_attr, 'emis:restriction')
+                non_namespaced_filter_rest = filter_attr.findall('restriction')
+                filter_restrictions = non_namespaced_filter_rest + [r for r in namespaced_filter_rest if r not in non_namespaced_filter_rest]
+                nested_restrictions.extend(filter_restrictions)
+            
+            # Parse all found restrictions
+            all_restrictions = direct_restrictions + nested_restrictions
             for restriction_elem in all_restrictions:
                 restriction = parse_restriction(restriction_elem, self.namespaces)
                 if restriction:

@@ -96,7 +96,8 @@ def render_list_reports_tab(xml_content: str, xml_filename: str):
         if report_results and hasattr(report_results, 'report_breakdown') and 'list' in report_results.report_breakdown:
             list_reports = report_results.report_breakdown['list']
         else:
-            st.warning("⚠️ Report analysis not available. List reports require pre-processed data.")
+            st.info("📋 No List Reports found in this XML file.")
+            st.caption("This XML contains only searches or other report types.")
             return
         
         from ...core.report_classifier import ReportClassifier
@@ -108,8 +109,8 @@ def render_list_reports_tab(xml_content: str, xml_filename: str):
             list_reports = report_results.report_breakdown['list']
         else:
             # No pre-processed data available - skip expensive processing
-            st.warning("⚠️ Report analysis not available. List reports require pre-processed data.")
-            st.info("Please ensure the XML analysis completed successfully.")
+            st.info("📋 No List Reports found in this XML file.")
+            st.caption("This XML contains only searches or other report types.")
             return
         list_count = len(list_reports)
         
@@ -190,8 +191,8 @@ def render_audit_reports_tab(xml_content: str, xml_filename: str):
             audit_reports = report_results.report_breakdown['audit']
         else:
             # No pre-processed data available - skip expensive processing
-            st.warning("⚠️ Report analysis not available. Audit reports require pre-processed data.")
-            st.info("Please ensure the XML analysis completed successfully.")
+            st.info("📊 No Audit Reports found in this XML file.")
+            st.caption("This XML contains only searches or other report types.")
             return
         
         audit_count = len(audit_reports)
@@ -276,8 +277,8 @@ def render_aggregate_reports_tab(xml_content: str, xml_filename: str):
             aggregate_reports = report_results.report_breakdown['aggregate']
         else:
             # No pre-processed data available - skip expensive processing
-            st.warning("⚠️ Report analysis not available. Aggregate reports require pre-processed data.")
-            st.info("Please ensure the XML analysis completed successfully.")
+            st.info("📈 No Aggregate Reports found in this XML file.")
+            st.caption("This XML contains only searches or other report types.")
             return
         aggregate_count = len(aggregate_reports)
         
@@ -609,7 +610,7 @@ def render_report_visualization(report, analysis):
         return None
     
     # Report header with useful info
-    col1, col2 = st.columns([3, 1])
+    col1, col2, col3 = st.columns([2, 1, 1])
     
     with col1:
         if report.description:
@@ -638,20 +639,46 @@ def render_report_visualization(report, analysis):
         st.markdown(f"**Search Date:** {report.search_date}")
     
     with col2:
-        # Immediate export functionality - no page refresh
+        # Excel export functionality - no page refresh
         try:
             export_handler = ReportExportHandler(analysis)
             filename, content = export_handler.generate_report_export(report)
             st.download_button(
-                label=f"📥 Export {report_type.strip('[]').title()}",
+                label="📥 Excel",
                 data=content,
                 file_name=filename,
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                help=f"Download comprehensive {report_type.strip('[]').title()} export with structure, filters, and clinical codes",
-                key=f"download_{report.id}_{report_type}"
+                help=f"Download comprehensive {report_type.strip('[]').title()} Excel export with structure, filters, and clinical codes",
+                key=f"download_excel_{report.id}_{report_type}"
             )
         except Exception as e:
-            st.error(f"Export failed: {e}")
+            st.error(f"Excel export failed: {e}")
+            import traceback
+            with st.expander("Error Details", expanded=False):
+                st.code(traceback.format_exc())
+    
+    with col3:
+        # JSON export functionality - dynamic import to avoid circular dependencies
+        xml_filename = st.session_state.get('xml_filename', 'unknown.xml')
+        try:
+            # Dynamic import to avoid circular dependency
+            import importlib
+            json_module = importlib.import_module('util_modules.export_handlers.report_json_export_generator')
+            ReportJSONExportGenerator = json_module.ReportJSONExportGenerator
+            
+            json_generator = ReportJSONExportGenerator(analysis)
+            json_filename, json_content = json_generator.generate_report_json(report, xml_filename)
+            
+            st.download_button(
+                label="📥 JSON",
+                data=json_content,
+                file_name=json_filename,
+                mime="application/json",
+                help=f"Download {report_type.strip('[]').title()} structure as JSON for programmatic recreation",
+                key=f"download_json_{report.id}_{report_type}"
+            )
+        except Exception as e:
+            st.error(f"JSON export failed: {e}")
             import traceback
             with st.expander("Error Details", expanded=False):
                 st.code(traceback.format_exc())
@@ -721,10 +748,31 @@ def render_list_report_details(report):
     
     if report.column_groups:
         for i, group in enumerate(report.column_groups, 1):
-            # Combine group info into cleaner header
+            # Combine group info into cleaner header with restriction info
             group_name = group.get('display_name', 'Unnamed')
             logical_table = group.get('logical_table', 'N/A')
-            with st.expander(f"Group {i}: {group_name} (Logical Table: {logical_table})", expanded=False):  # Default closed
+            
+            # Check for restrictions to enhance the group name display
+            enhanced_group_name = group_name
+            if group.get('has_criteria', False) and group.get('criteria_details'):
+                criteria_details = group['criteria_details']
+                criteria_list = criteria_details.get('criteria', [])
+                
+                for criterion in criteria_list:
+                    restrictions = criterion.get('restrictions', [])
+                    for restriction in restrictions:
+                        if isinstance(restriction, dict) and restriction.get('record_count'):
+                            record_count = restriction.get('record_count')
+                            direction = restriction.get('direction', 'DESC')
+                            if direction == 'DESC':
+                                enhanced_group_name = f"Latest {record_count} {group_name.lower()}"
+                            else:
+                                enhanced_group_name = f"First {record_count} {group_name.lower()}"
+                            break
+                    if enhanced_group_name != group_name:  # If we found a restriction, break out of criteria loop
+                        break
+            
+            with st.expander(f"Group {i}: {enhanced_group_name} (Logical Table: {logical_table})", expanded=False):  # Default closed
                 
                 # Column structure (user-visible EMIS data)
                 columns = group.get('columns', [])

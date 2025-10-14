@@ -347,6 +347,7 @@ def render_dependencies_tab(analysis):
     render_dependency_tree(analysis.dependency_tree, reports_to_process)
 
 
+
 def render_detailed_rules_tab(analysis, xml_filename):
     """
     Render detailed rules and export sub-tab.

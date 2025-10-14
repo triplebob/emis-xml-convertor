@@ -275,6 +275,45 @@ Each column group can contain:
 - **`recordCount`**: Limit results per patient (Latest 1, Latest 5, etc.)
 - **`direction`**: Sort order (ASC/DESC for date-based ordering)
 
+#### List Report Restriction Pattern
+List Reports use a nested restriction structure within column group criteria. Two patterns exist:
+
+**Pattern 1: Restriction as sibling to columnValue (most common)**
+```xml
+<criterion>
+  <filterAttribute>
+    <columnValue>
+      <valueSet>...</valueSet>
+    </columnValue>
+    <restriction>
+      <columnOrder>
+        <recordCount>5</recordCount>
+        <columns>
+          <column>DATE</column>
+          <direction>DESC</direction>
+        </columns>
+      </columnOrder>
+    </restriction>
+  </filterAttribute>
+</criterion>
+```
+
+**Pattern 2: Restriction under columnValue (alternative structure)**
+```xml
+<criterion>
+  <filterAttribute>
+    <columnValue>
+      <valueSet>...</valueSet>
+      <restriction>...</restriction>
+    </columnValue>
+  </filterAttribute>
+</criterion>
+```
+- **Paths**: `filterAttribute > restriction` (Pattern 1) or `filterAttribute > columnValue > restriction` (Pattern 2)
+- **Purpose**: Record count limits with column sorting applied to filtered clinical codes
+- **Example**: "Latest 5 BMI recordings" filters for BMI codes then applies Latest 5 with DATE DESC sorting
+- **Implementation**: Parser must check both direct criterion restrictions AND nested columnValue restrictions
+
 ### Audit Reports
 - **Structure**: `<auditReport><customAggregate>` with multiple `<population>` references
 - **Parent Type**: `ALL` (organizational reporting across all patients including left and deceased)

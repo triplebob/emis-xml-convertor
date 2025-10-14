@@ -432,6 +432,9 @@ class SearchExportHandler:
                     continue
                     
                 for value in vs['values']:
+                    emis_code = value.get('value', '')
+                    snomed_info = self._get_snomed_translation(emis_code)
+                    
                     codes_data.append({
                         'Rule Number': rule_number,
                         'Criterion Number': i,
@@ -441,7 +444,9 @@ class SearchExportHandler:
                         'Value Set ID': vs.get('id', ''),
                         'Value Set Description': vs.get('description', ''),
                         'Code System': vs.get('code_system', ''),
-                        'Code Value': value.get('value', ''),
+                        'EMIS GUID': emis_code,
+                        'SNOMED Code': snomed_info.get('snomed_code', 'Not found'),
+                        'SNOMED Description': snomed_info.get('description', value.get('display_name', '')),
                         'Display Name': value.get('display_name', ''),
                         'Include Children': value.get('include_children', False),
                         'Is Refset': value.get('is_refset', False)
@@ -456,6 +461,9 @@ class SearchExportHandler:
                                 continue
                                 
                             for value in vs['values']:
+                                emis_code = value.get('value', '')
+                                snomed_info = self._get_snomed_translation(emis_code)
+                                
                                 codes_data.append({
                                     'Rule Number': rule_number,
                                     'Criterion Number': f"{i}.{j}",
@@ -465,7 +473,9 @@ class SearchExportHandler:
                                     'Value Set ID': vs.get('id', ''),
                                     'Value Set Description': vs.get('description', ''),
                                     'Code System': vs.get('code_system', ''),
-                                    'Code Value': value.get('value', ''),
+                                    'EMIS GUID': emis_code,
+                                    'SNOMED Code': snomed_info.get('snomed_code', 'Not found'),
+                                    'SNOMED Description': snomed_info.get('description', value.get('display_name', '')),
                                     'Display Name': value.get('display_name', ''),
                                     'Include Children': value.get('include_children', False),
                                     'Is Refset': value.get('is_refset', False)
@@ -491,6 +501,9 @@ class SearchExportHandler:
                         continue
                         
                     for value in vs['values']:
+                        emis_code = value.get('value', '')
+                        snomed_info = self._get_snomed_translation(emis_code)
+                        
                         all_codes.append({
                             'Rule': rule_num,
                             'Criterion': crit_num,
@@ -499,7 +512,9 @@ class SearchExportHandler:
                             'Exception Code': criterion.exception_code or '',
                             'Value Set': vs.get('description', vs.get('id', 'Unknown')),
                             'Code System': vs.get('code_system', ''),
-                            'Code Value': value.get('value', ''),
+                            'EMIS GUID': emis_code,
+                            'SNOMED Code': snomed_info.get('snomed_code', 'Not found'),
+                            'SNOMED Description': snomed_info.get('description', value.get('display_name', '')),
                             'Display Name': value.get('display_name', ''),
                             'Include Children': value.get('include_children', False),
                             'Is Refset': value.get('is_refset', False)
@@ -514,6 +529,9 @@ class SearchExportHandler:
                                     continue
                                     
                                 for value in vs['values']:
+                                    emis_code = value.get('value', '')
+                                    snomed_info = self._get_snomed_translation(emis_code)
+                                    
                                     all_codes.append({
                                         'Rule': rule_num,
                                         'Criterion': f"{crit_num}.{j}",
@@ -522,7 +540,9 @@ class SearchExportHandler:
                                         'Exception Code': linked_crit.exception_code or '',
                                         'Value Set': vs.get('description', vs.get('id', 'Unknown')),
                                         'Code System': vs.get('code_system', ''),
-                                        'Code Value': value.get('value', ''),
+                                        'EMIS GUID': emis_code,
+                                        'SNOMED Code': snomed_info.get('snomed_code', 'Not found'),
+                                        'SNOMED Description': snomed_info.get('description', value.get('display_name', '')),
                                         'Display Name': value.get('display_name', ''),
                                         'Include Children': value.get('include_children', False),
                                         'Is Refset': value.get('is_refset', False)
@@ -538,6 +558,66 @@ class SearchExportHandler:
                     if linked.id == criterion.id:
                         return True
         return False
+    
+    def _get_snomed_translation(self, emis_code: str) -> Dict[str, Any]:
+        """Get SNOMED translation from already processed clinical codes"""
+        try:
+            # Import the same function used by clinical tabs to get unified data
+            from ..ui.tabs.tab_helpers import get_unified_clinical_data
+            unified_results = get_unified_clinical_data()
+            
+            # Search through clinical codes
+            clinical_codes = unified_results.get('clinical_codes', [])
+            for code in clinical_codes:
+                if code.get('EMIS GUID', '') == emis_code:
+                    return {
+                        'snomed_code': code.get('SNOMED Code', 'Not found'),
+                        'description': code.get('Description', ''),
+                        'code_system': code.get('Code System', ''),
+                        'is_medication': False,
+                        'is_refset': code.get('Refset', 'No') == 'Yes',
+                        'status': 'translated' if code.get('SNOMED Code', 'Not found') != 'Not found' else 'not_found'
+                    }
+            
+            # Search through medications
+            medications = unified_results.get('medications', [])
+            for med in medications:
+                if med.get('EMIS GUID', '') == emis_code:
+                    return {
+                        'snomed_code': med.get('SNOMED Code', 'Not found'),
+                        'description': med.get('Description', ''),
+                        'code_system': med.get('Code System', ''),
+                        'is_medication': True,
+                        'is_refset': False,
+                        'status': 'translated' if med.get('SNOMED Code', 'Not found') != 'Not found' else 'not_found'
+                    }
+            
+            # Search through refsets
+            refsets = unified_results.get('refsets', [])
+            for refset in refsets:
+                if refset.get('EMIS GUID', '') == emis_code:
+                    return {
+                        'snomed_code': refset.get('SNOMED Code', 'Not found'),
+                        'description': refset.get('Description', ''),
+                        'code_system': refset.get('Code System', ''),
+                        'is_medication': False,
+                        'is_refset': True,
+                        'status': 'translated' if refset.get('SNOMED Code', 'Not found') != 'Not found' else 'not_found'
+                    }
+            
+        except Exception:
+            # Fallback to not found if unified data not available
+            pass
+        
+        # If not found in processed data, return not found
+        return {
+            'snomed_code': 'Not found',
+            'description': '',
+            'code_system': '',
+            'is_medication': False,
+            'is_refset': False,
+            'status': 'not_found'
+        }
     
     def _format_column_filter_details(self, col_filter):
         """Format column filter details into a comprehensive, rebuild-ready description"""

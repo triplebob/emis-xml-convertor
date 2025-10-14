@@ -317,11 +317,11 @@ class ReportParser(XMLParserBase):
                     for restriction in parsed_criterion.restrictions:
                         if hasattr(restriction, '__dict__'):
                             restriction_data = {
-                                'type': getattr(restriction, 'restriction_type', 'unknown'),
+                                'type': getattr(restriction, 'type', 'unknown'),
                                 'record_count': getattr(restriction, 'record_count', None),
-                                'ordering_column': getattr(restriction, 'ordering_column', None),
+                                'ordering_column': 'DATE',  # List Report restrictions typically order by DATE
                                 'direction': getattr(restriction, 'direction', None),
-                                'description': str(restriction)
+                                'description': getattr(restriction, 'description', str(restriction))
                             }
                         else:
                             restriction_data = {'description': str(restriction)}

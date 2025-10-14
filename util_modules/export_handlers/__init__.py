@@ -8,11 +8,13 @@ from .rule_export import RuleExportHandler
 from .clinical_code_export import ClinicalCodeExportHandler
 from .report_export import ReportExportHandler
 from .ui_export_manager import UIExportManager
+from .json_export_generator import JSONExportGenerator
 
 __all__ = [
     'SearchExportHandler',
     'RuleExportHandler', 
     'ClinicalCodeExportHandler',
     'ReportExportHandler',
-    'UIExportManager'
+    'UIExportManager',
+    'JSONExportGenerator'
 ]

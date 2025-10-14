@@ -182,7 +182,9 @@ emis-xml-convertor/
 │   │   ├── search_export.py             # Search-specific exports
 │   │   ├── report_export.py             # Report export handler
 │   │   ├── rule_export.py               # Individual rule export
-│   │   └── clinical_code_export.py      # Clinical code exports
+│   │   ├── clinical_code_export.py      # Clinical code exports
+│   │   ├── json_export_generator.py     # Search JSON exports for AI/LLM
+│   │   └── report_json_export_generator.py # Report JSON exports
 │   ├── utils/                 # General utilities
 │   │   ├── lookup.py                    # Lookup table management
 │   │   ├── audit.py                     # Processing statistics

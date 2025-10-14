@@ -174,9 +174,19 @@ class ReportExportHandler:
                 # Restrictions
                 restrictions = criterion.get('restrictions', [])
                 for restriction in restrictions:
-                    if restriction.get('record_count'):
+                    # Handle both SearchRestriction objects and dictionary format
+                    if hasattr(restriction, 'record_count'):
+                        # SearchRestriction object
+                        count = restriction.record_count
+                        column = getattr(restriction, 'ordering_column', None)
+                    elif isinstance(restriction, dict) and restriction.get('record_count'):
+                        # Dictionary format
                         count = restriction.get('record_count')
                         column = restriction.get('ordering_column')
+                    else:
+                        continue
+                        
+                    if count:
                         if column and column != 'None':
                             filter_data.append(['Rule', f'Ordering by: {column}, select latest {count}', ''])
                         else:
@@ -400,9 +410,19 @@ class ReportExportHandler:
                             # Add restriction information
                             restrictions = criterion.get('restrictions', [])
                             for restriction in restrictions:
-                                if restriction.get('record_count'):
+                                # Handle both SearchRestriction objects and dictionary format
+                                if hasattr(restriction, 'record_count'):
+                                    # SearchRestriction object
+                                    count = restriction.record_count
+                                    column = getattr(restriction, 'ordering_column', None)
+                                elif isinstance(restriction, dict) and restriction.get('record_count'):
+                                    # Dictionary format
                                     count = restriction.get('record_count')
                                     column = restriction.get('ordering_column')
+                                else:
+                                    continue
+                                    
+                                if count:
                                     if column and column != 'None':
                                         filter_rules.append(f"Ordering by: {column}, select latest {count}")
                                     else:
@@ -490,14 +510,27 @@ class ReportExportHandler:
             return code_system
     
     def _get_parent_display_name(self, report):
-        """Get meaningful parent display name instead of raw parent type"""
-        # Try to resolve parent search name from dependencies
-        if hasattr(report, 'direct_dependencies') and report.direct_dependencies:
-            parent_guid = report.direct_dependencies[0]  # First dependency is usually the parent
-            # Find the parent report by GUID
-            for parent_report in self.analysis.reports:
-                if parent_report.id == parent_guid:
-                    return f"Parent Search: {parent_report.name}"
+        """Get meaningful parent display name using same logic as JSON export"""
+        # Try to resolve parent search name from session state (same as JSON export)
+        try:
+            import streamlit as st
+            analysis = st.session_state.get('search_analysis')
+            
+            if analysis and hasattr(analysis, 'reports'):
+                # Try direct dependencies first
+                if hasattr(report, 'direct_dependencies') and report.direct_dependencies:
+                    parent_guid = report.direct_dependencies[0]
+                    for parent_report in analysis.reports:
+                        if parent_report.id == parent_guid:
+                            return f"Parent Search: {parent_report.name}"
+                
+                # Try parent_guid as fallback
+                elif hasattr(report, 'parent_guid') and report.parent_guid:
+                    for parent_report in analysis.reports:
+                        if parent_report.id == report.parent_guid:
+                            return f"Parent Search: {parent_report.name}"
+        except Exception:
+            pass
         
         # Fallback to meaningful parent type descriptions
         if report.parent_type == 'ACTIVE':
@@ -507,12 +540,7 @@ class ReportExportHandler:
         elif report.parent_type == 'POP':
             return "Population: Population-based (filtered)"
         elif hasattr(report, 'parent_guid') and report.parent_guid:
-            # Try to resolve custom search parent name
-            parent_name = self._get_parent_display_name(report)
-            if parent_name and "Population:" not in parent_name:
-                return f"Parent Search: {parent_name}"
-            else:
-                return f"Parent Search: Custom search ({report.parent_guid[:8]}...)"
+            return f"Parent Search: Custom search ({report.parent_guid[:8]}...)"
         elif report.parent_type:
             return f"Parent Type: {report.parent_type}"
         else:

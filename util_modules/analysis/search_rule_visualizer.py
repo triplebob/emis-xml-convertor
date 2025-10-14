@@ -69,7 +69,7 @@ from .linked_criteria_handler import (
     filter_top_level_criteria,
     has_linked_criteria
 )
-from ..export_handlers import SearchExportHandler
+# Import moved to function level to avoid circular imports
 from ..core import FolderManager, SearchManager
 from ..utils.text_utils import pluralize_unit, format_operator_text
 from ..xml_parsers.criterion_parser import check_criterion_parameters
@@ -219,15 +219,21 @@ def _render_single_detailed_rule(selected_search, reports):
     clean_name = SearchManager.clean_search_name(selected_search.name)
     classification = "🔍"  # All items in search analysis are searches
     
-    # Header with export option
-    col1, col2 = st.columns([4, 1])
+    # Header with export options
+    col1, col2, col3 = st.columns([3, 1, 1])
     with col1:
         st.markdown(f"### {classification} {clean_name}")
+    
     with col2:
-        # Get orchestrated analysis from session state
+        # Excel Export - dynamic import to avoid circular dependency
         analysis = st.session_state.get('search_analysis')
         if analysis:
             try:
+                # Dynamic import to avoid circular dependency
+                import importlib
+                export_module = importlib.import_module('util_modules.export_handlers.search_export')
+                SearchExportHandler = export_module.SearchExportHandler
+                
                 export_handler = SearchExportHandler(analysis)
                 
                 # Determine if this is a child search
@@ -239,17 +245,44 @@ def _render_single_detailed_rule(selected_search, reports):
                 )
                 
                 st.download_button(
-                    label="📥 Export",
+                    label="📥 Excel",
                     data=content,
                     file_name=filename,
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    help=f"Download comprehensive export for: {clean_name}",
-                    key=f"export_{selected_search.id}"
+                    help=f"Export search logic to Excel: {clean_name}",
+                    key=f"export_excel_{selected_search.id}"
                 )
             except Exception as e:
-                st.error(f"Export functionality not available: {str(e)}")
+                st.error(f"Excel export not available: {str(e)}")
         else:
-            st.error("Analysis data not available for export")
+            st.error("Analysis data not available for Excel export")
+    
+    with col3:
+        # JSON Export - avoid circular import by doing dynamic import
+        analysis = st.session_state.get('search_analysis')
+        xml_filename = st.session_state.get('xml_filename', 'unknown.xml')
+        if analysis:
+            try:
+                # Dynamic import to avoid circular dependency
+                import importlib
+                json_module = importlib.import_module('util_modules.export_handlers.json_export_generator')
+                JSONExportGenerator = json_module.JSONExportGenerator
+                
+                json_generator = JSONExportGenerator(analysis)
+                json_filename, json_content = json_generator.generate_search_json(selected_search, xml_filename)
+                
+                st.download_button(
+                    label="📥 JSON",
+                    data=json_content,
+                    file_name=json_filename,
+                    mime="application/json",
+                    help=f"Export search logic as JSON: {clean_name}",
+                    key=f"export_json_{selected_search.id}"
+                )
+            except Exception as e:
+                st.error(f"JSON export not available: {str(e)}")
+        else:
+            st.error("Analysis data not available for JSON export")
     
     if selected_search.description:
         st.markdown("### 📋 Search Description")
@@ -307,22 +340,55 @@ def render_individual_search_details(selected_search, reports, show_dependencies
     if selected_search:
         clean_name = SearchManager.clean_search_name(selected_search.name)
         
-        col1, col2 = st.columns([3, 1])
+        col1, col2, col3 = st.columns([2, 1, 1])
+        
         with col2:
-            # Use SearchExportHandler for individual search export
+            # Excel Export - dynamic import
             try:
+                import importlib
+                export_module = importlib.import_module('util_modules.export_handlers.search_export')
+                SearchExportHandler = export_module.SearchExportHandler
                 export_handler = SearchExportHandler(None)  # Analysis not needed for single search
                 filename, content = export_handler.generate_search_export(selected_search, include_parent_info=True)
                 
                 st.download_button(
-                    label="📥 Export",
+                    label="📥 Excel",
                     data=content,
                     file_name=filename,
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    help=f"Download search export for: {clean_name}"
+                    help=f"Export search logic to Excel: {clean_name}",
+                    key=f"individual_export_excel_{selected_search.id}"
                 )
             except Exception as e:
-                st.error(f"Export functionality not available: {str(e)}")
+                st.error(f"Excel export not available: {str(e)}")
+        
+        with col3:
+            # JSON Export - dynamic import
+            try:
+                import importlib
+                json_module = importlib.import_module('util_modules.export_handlers.json_export_generator')
+                JSONExportGenerator = json_module.JSONExportGenerator
+                
+                # We need analysis for JSON export
+                analysis = st.session_state.get('search_analysis')
+                xml_filename = st.session_state.get('xml_filename', 'unknown.xml')
+                
+                if analysis:
+                    json_generator = JSONExportGenerator(analysis)
+                    json_filename, json_content = json_generator.generate_search_json(selected_search, xml_filename)
+                    
+                    st.download_button(
+                        label="📥 JSON",
+                        data=json_content,
+                        file_name=json_filename,
+                        mime="application/json",
+                        help=f"Export search logic as JSON: {clean_name}",
+                        key=f"individual_export_json_{selected_search.id}"
+                    )
+                else:
+                    st.error("Analysis not available for JSON export")
+            except Exception as e:
+                st.error(f"JSON export not available: {str(e)}")
     
     if selected_search.description:
         st.markdown("### 📋 Search Description")
