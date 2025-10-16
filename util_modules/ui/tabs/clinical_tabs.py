@@ -45,6 +45,13 @@ except ImportError:
 from .analytics_tab import render_analytics_tab
 from .analysis_tabs import render_search_analysis_tab
 
+# NHS Terminology Server integration
+try:
+    from ...terminology_server.expansion_ui import render_expansion_tab_content
+    NHS_TERMINOLOGY_AVAILABLE = True
+except ImportError:
+    NHS_TERMINOLOGY_AVAILABLE = False
+
 
 def render_summary_tab(results):
     """Render the summary tab with statistics."""
@@ -1036,14 +1043,15 @@ def render_clinical_codes_main_tab(results):
     st.session_state.clinical_show_code_sources = True
     
     # Clinical codes sub-tabs
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
         "📋 Summary", 
         "🏥 Clinical Codes", 
         "💊 Medications", 
         "📊 Refsets", 
         "⚠️ Pseudo-Refsets", 
         "📝 Pseudo-Refset Members", 
-        "📊 Analytics"
+        "📊 Analytics",
+        "🏥 NHS Term Server"
     ])
     
     with tab1:
@@ -1066,6 +1074,47 @@ def render_clinical_codes_main_tab(results):
     
     with tab7:
         render_analytics_tab()
+    
+    with tab8:
+        render_nhs_terminology_tab(results)
+
+
+def render_nhs_terminology_tab(results):
+    """Render NHS Terminology Server integration tab"""
+    if not NHS_TERMINOLOGY_AVAILABLE:
+        st.error("❌ NHS Terminology Server integration not available")
+        st.info("The terminology server module failed to import. Please check the installation.")
+        return
+    
+    # Get unified clinical data for expansion
+    from .tab_helpers import get_unified_clinical_data
+    
+    unified_results = get_unified_clinical_data()
+    if not unified_results:
+        st.warning("❌ No clinical analysis data found - please run XML analysis first")
+        return
+    
+    # Combine all clinical codes for expansion analysis
+    all_clinical_codes = []
+    
+    # Add standalone clinical codes
+    clinical_codes = unified_results.get('clinical_codes', [])
+    all_clinical_codes.extend(clinical_codes)
+    
+    # Add pseudo-refset member codes
+    pseudo_members = unified_results.get('clinical_pseudo_members', [])
+    all_clinical_codes.extend(pseudo_members)
+    
+    # Add refsets (they might also have includechildren)
+    refsets = unified_results.get('refsets', [])
+    all_clinical_codes.extend(refsets)
+    
+    if not all_clinical_codes:
+        st.info("ℹ️ No clinical codes found for expansion analysis")
+        return
+    
+    # Render the expansion interface
+    render_expansion_tab_content(all_clinical_codes)
 
 
 def render_results_tabs(results):

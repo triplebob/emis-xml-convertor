@@ -1,6 +1,14 @@
 import streamlit as st
 import re
 from ..utils.lookup import load_lookup_table, get_lookup_statistics
+from ..utils.caching.lookup_cache import get_cached_emis_lookup
+
+# NHS Terminology Server integration
+try:
+    from ..terminology_server.expansion_ui import render_terminology_server_status
+    NHS_TERMINOLOGY_AVAILABLE = True
+except ImportError:
+    NHS_TERMINOLOGY_AVAILABLE = False
 
 def render_status_bar():
     """Render the status bar in the sidebar with lookup table information."""
@@ -9,7 +17,22 @@ def render_status_bar():
         
         with st.spinner("Loading lookup table..."):
             try:
-                lookup_df, emis_guid_col, snomed_code_col, version_info = load_lookup_table()
+                # First try to use cached lookup data
+                lookup_df = st.session_state.get('lookup_df')
+                emis_guid_col = st.session_state.get('emis_guid_col')
+                snomed_code_col = st.session_state.get('snomed_code_col')
+                version_info = st.session_state.get('lookup_version_info', {})
+                
+                # If not in session state, try cache, then fallback to GitHub
+                if lookup_df is None or emis_guid_col is None or snomed_code_col is None:
+                    # Check if we have cached data
+                    cached_data = None
+                    if lookup_df is not None and emis_guid_col is not None and snomed_code_col is not None:
+                        cached_data = get_cached_emis_lookup(lookup_df, snomed_code_col, emis_guid_col, version_info)
+                    
+                    if cached_data is None:
+                        # Fallback to GitHub API
+                        lookup_df, emis_guid_col, snomed_code_col, version_info = load_lookup_table()
                 
                 # Get lookup statistics
                 stats = get_lookup_statistics(lookup_df)
@@ -58,27 +81,43 @@ def render_status_bar():
                                 st.caption(f"📘 {extract_date_raw}")
                 
                 # Changelog section - Direct in-app display 
-                with st.sidebar.expander("🎯 What's New - v2.0.1", expanded=False):
+                with st.sidebar.expander("🎯 What's New - v2.1.0", expanded=False):
                     st.markdown("""
-                    **⚡ Performance & UI Improvements**
+                    **🌳 NHS Terminology Server Integration & Cache Optimization - v2.1.0**
                     
-                    Major performance optimizations and UI consistency improvements.
+                    Comprehensive NHS England Terminology Server integration with optimized caching architecture.
                     
-                    **🚀 Performance Enhancements:**
-                    - Unified pipeline caching (instant loading for refsets/pseudo-refsets)
-                    - Streamlit compatibility updates (eliminated deprecation warnings)
-                    - Consistent search counting across all tabs
+                    **🆕 NHS Terminology Server Features:**
+                    - SNOMED code expansion using NHS England FHIR R4 API
+                    - Hierarchical child/descendant concept discovery
+                    - EMIS vs Terminology Server child count comparison
+                    - Individual code lookup for testing and validation
+                    - Multiple export formats: CSV, JSON, XML-ready outputs
                     
-                    **🎨 UI/UX Improvements:**
-                    - Enhanced filter logic display
-                    - Improved dependency tree clarity (root vs branch searches)
-                    - One-click immediate downloads (eliminated page refresh issues)
+                    **📊 Enhanced Export Capabilities:**
+                    - Hierarchical JSON export with parent-child relationships
+                    - XML Output column for direct EMIS query implementation
+                    - Source file tracking in exports for traceability
+                    - EMIS Child Count vs Term Server Child Count comparison
                     
-                    **🔧 Technical Fixes:**
-                    - Fixed Rule Logic Browser functionality 
-                    - Consistent search metrics (Analytics: 36, Dependencies: 31+5, Rule Browser: 36)
-                    - Updated comprehensive module documentation
-                    - Enhanced filter hierarchy display (Filters → Additional Filters)
+                    **⚡ Cache Architecture Overhaul:**
+                    - Cache-first approach: local cache → GitHub cache → API fallback
+                    - Optimized lookup table loading for faster startup
+                    - Session state persistence during download operations
+                    - Terminology server results caching for UI performance
+                    
+                    **🎨 Interface Improvements:**
+                    - Real-time connection status monitoring in sidebar
+                    - Toast notifications for authentication updates
+                    - Results persistence across export operations
+                    - Enhanced expansion results table with detailed metrics
+                    - Improved filter hierarchy display consistency
+                    
+                    **🔧 Technical Enhancements:**
+                    - Comprehensive codebase audit for GitHub API optimization
+                    - Arrow serialization fixes for mixed data types
+                    - Enhanced error handling and status reporting
+                    - Streamlined UI with removed redundant connection testing
                     
                     ✅ **All improvements maintain full backward compatibility**
                     """)
@@ -88,7 +127,14 @@ def render_status_bar():
                 st.session_state.lookup_df = lookup_df
                 st.session_state.emis_guid_col = emis_guid_col
                 st.session_state.snomed_code_col = snomed_code_col
-                st.session_state.version_info = version_info
+                
+                # Only update version_info if we have valid data (don't overwrite good data with empty dict)
+                if version_info and len(version_info) > 0:
+                    st.session_state.lookup_version_info = version_info
+                
+                # Add NHS Terminology Server status
+                if NHS_TERMINOLOGY_AVAILABLE:
+                    render_terminology_server_status()
                 
                 return lookup_df, emis_guid_col, snomed_code_col
                 

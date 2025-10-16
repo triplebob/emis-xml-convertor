@@ -41,21 +41,6 @@ util_modules.export_handlers (specialized export handling)
 
 **When to modify:** UI layout changes, main workflow changes, parser coordination updates.
 
-### `xml_utils.py` - Core XML Parsing and GUID Extraction
-**Purpose:** Parses EMIS XML files and extracts EMIS GUIDs for translation.
-
-**Responsibilities:**
-- GUID extraction from valueSet and libraryItem elements
-- Code system classification (clinical vs medication)
-- Pseudo-refset detection
-- Source attribution for dual-mode deduplication
-- Universal namespace handling using NamespaceHandler
-
-**Key Functions:**
-- `parse_xml_for_emis_guids()` - Main GUID extraction with source tracking
-- Centralized namespace handling for mixed namespaced/non-namespaced XML
-
-**When to modify:** XML parsing logic changes, new EMIS XML formats, GUID extraction issues.
 
 ## Core Business Logic (`util_modules/core/`)
 
@@ -230,6 +215,17 @@ util_modules.export_handlers (specialized export handling)
 
 **When to modify:** Changes to shared structures, new common patterns.
 
+### `linked_criteria_handler.py` - Linked Criteria Processing
+**Purpose:** Handles complex linked criteria relationships and temporal constraints.
+
+**Responsibilities:**
+- Cross-table relationship parsing and validation
+- Temporal constraint processing for linked criteria
+- Complex criterion relationship resolution
+- Integration with search analysis pipeline
+
+**When to modify:** Linked criteria logic changes, temporal constraint updates, cross-table relationship improvements.
+
 ### Visualization Modules
 
 #### `search_rule_visualizer.py` - Search Rule Display
@@ -355,12 +351,13 @@ util_modules.export_handlers (specialized export handling)
 ### Core UI Components
 
 #### `status_bar.py` - Application Status Display
-**Purpose:** Shows lookup table status and system health.
+**Purpose:** Shows lookup table status and system health with cache-aware loading.
 
 **Responsibilities:**
-- Lookup table loading and status
-- Version information display
-- Error state handling
+- Cache-first lookup table loading and status reporting
+- Version information display with cache metadata
+- Token health monitoring and expiry warnings
+- Error state handling and fallback status
 
 **When to modify:** Status display changes, new health checks.
 
@@ -519,6 +516,22 @@ element = ns.find(parent, 'elementName')  # Handles both <elementName> and <emis
 
 **When to modify:** New report structures, enterprise patterns, healthcare workflows.
 
+#### `xml_utils.py` - Core XML Parsing and GUID Extraction
+**Purpose:** Core XML parsing utilities and EMIS GUID extraction functionality.
+
+**Responsibilities:**
+- GUID extraction from valueSet and libraryItem elements
+- Code system classification (clinical vs medication)
+- Pseudo-refset detection and handling
+- Source attribution for dual-mode deduplication
+- Universal namespace handling using NamespaceHandler
+
+**Key Functions:**
+- `parse_xml_for_emis_guids()` - Main GUID extraction with source tracking
+- `extract_codes_with_separate_parsers()` - Orchestrated XML processing
+
+**When to modify:** XML parsing logic changes, new EMIS XML formats, GUID extraction issues.
+
 ## Shared Utilities (`util_modules/common/`)
 
 ### `error_handling.py` - Standardized Error Management
@@ -536,7 +549,20 @@ element = ns.find(parent, 'elementName')  # Handles both <elementName> and <emis
 ## General Utilities (`util_modules/utils/`)
 
 ### `lookup.py` - Lookup Table Management
-**Purpose:** Loads SNOMED lookup table and creates fast lookup dictionaries.
+**Purpose:** Cache-first lookup table management with GitHub fallback for SNOMED code translation.
+
+**Responsibilities:**
+- Cache-first loading strategy (session state → local cache → GitHub API)
+- Fast lookup dictionary creation and caching
+- Optimized lookup cache management with hit/miss tracking
+- Batch translation operations for improved performance
+- Lookup table statistics and health monitoring
+
+**Key Functions:**
+- `load_lookup_table()` - Primary loader with cache-first approach
+- `get_optimized_lookup_cache()` - High-performance cache instance
+- `batch_translate_emis_guids()` - Optimized batch translations
+- `create_lookup_dictionaries()` - Dictionary creation for O(1) lookups
 
 ### `audit.py` - Processing Statistics and Validation
 **Purpose:** Creates comprehensive stats about translation success rates and processing time.
@@ -548,7 +574,96 @@ element = ns.find(parent, 'elementName')  # Handles both <elementName> and <emis
 **Purpose:** Logging and debugging tools for development and troubleshooting.
 
 ### `github_loader.py` - External Data Loading
-**Purpose:** GitHub API integration for loading lookup tables.
+**Purpose:** GitHub API client for lookup table loading with authentication and format detection.
+
+**Responsibilities:**
+- GitHub API authentication and token health monitoring
+- Automatic format detection (CSV/Parquet)
+- Network request optimization with fallback strategies
+- Version information extraction and validation
+- Error handling for authentication and network issues
+
+### `caching/lookup_cache.py` - Core Caching Engine
+**Purpose:** Provides cache-first lookup table access with multi-tier fallback strategy.
+
+**Responsibilities:**
+- Cache-first loading strategy (local cache → GitHub cache → API fallback)
+- Persistent cache file management with hash validation
+- Lookup record storage with complete metadata preservation
+- Cache health monitoring and automatic validation
+- Memory-efficient cache building and retrieval
+
+**Key Functions:**
+- `get_cached_emis_lookup()` - Primary cache access with fallback strategy
+- `build_emis_lookup_cache()` - Cache building with GitHub fallback
+- `generate_cache_for_github()` - Cache file generation for distribution
+
+**When to modify:** Cache strategy changes, performance optimization, new fallback mechanisms.
+
+### `caching/generate_github_cache.py` - Cache Generation Utility
+**Purpose:** Standalone script for generating cache files for GitHub distribution.
+
+**Responsibilities:**
+- Command-line cache generation for deployment
+- Lookup table loading and processing
+- Cache file creation with proper formatting
+- Output validation and size reporting
+
+**When to modify:** Deployment process changes, cache file format updates.
+
+### `terminology_server/nhs_terminology_client.py` - FHIR R4 API Client
+**Purpose:** Handles NHS England Terminology Server API communication and authentication.
+
+**Responsibilities:**
+- OAuth2 system-to-system authentication with token management
+- FHIR R4 API request handling with proper headers
+- Concept lookup and validation operations
+- Child concept expansion using Expression Constraint Language
+- Error handling for network and authentication failures
+
+**Key Classes:**
+- `NHSTerminologyClient` - Main API client with authentication
+- `ExpansionResult` - Result container for expansion operations
+- `ExpandedConcept` - Individual concept data structure
+
+**When to modify:** API specification changes, authentication updates, new FHIR operations.
+
+### `terminology_server/expansion_service.py` - Service Layer for Code Expansion
+**Purpose:** Business logic layer for SNOMED code expansion operations.
+
+**Responsibilities:**
+- High-level expansion workflow orchestration
+- Integration with EMIS lookup tables for GUID mapping
+- Expansion result processing and validation
+- Summary dataframe creation with comparison metrics
+- Child code data enhancement with EMIS integration
+
+**Key Functions:**
+- `expand_codes_batch()` - Batch expansion with progress tracking
+- `create_expansion_summary_dataframe()` - Results table generation
+- `enhance_child_codes_with_emis_data()` - EMIS GUID integration
+
+**When to modify:** Expansion logic changes, EMIS integration updates, result processing requirements.
+
+### `terminology_server/expansion_ui.py` - User Interface Components
+**Purpose:** Streamlit UI components for terminology server integration.
+
+**Responsibilities:**
+- Main expansion interface with progress tracking
+- Results display with detailed metrics and comparison
+- Export functionality for multiple formats (CSV, JSON, XML)
+- Individual code lookup for testing and validation
+- Session state management for expansion results
+- Status monitoring and error display
+
+**Export Formats:**
+- Summary CSV with expansion results and metrics
+- Child codes CSV with SNOMED codes and descriptions
+- EMIS import CSV with GUID mappings
+- Hierarchical JSON with parent-child relationships
+- XML output for direct EMIS query implementation
+
+**When to modify:** UI requirements changes, new export formats, display improvements.
 
 ## Architecture Dependencies
 
@@ -559,15 +674,17 @@ util_modules/
 ├── common/             # Shared utilities and infrastructure
 ├── core/               # Core business logic
 ├── export_handlers/    # Export functionality
+├── terminology_server/ # NHS Terminology Server integration
 ├── ui/                 # User interface components
-├── utils/              # General utilities
+├── utils/              # General utilities and caching
 └── xml_parsers/        # Modular XML parsing
 ```
 
 ### Dependency Rules:
-- **UI modules** depend on core, common, and utils modules
+- **UI modules** depend on core, common, utils, and terminology_server modules
 - **Analysis modules** use xml_parsers, core, and ui modules
 - **Export handlers** use core, common, and utils modules
+- **Terminology server** uses utils (caching) and integrates with ui modules
 - **All modules** can use common utilities and error handling
 
 ## Key Architectural Features
@@ -613,9 +730,12 @@ util_modules/
 **UI display issues:** `util_modules/ui/` or visualization modules
 **Classification problems:** `util_modules/core/report_classifier.py`
 **Search rule logic:** `util_modules/analysis/search_analyzer.py`
-**Translation issues:** `util_modules/core/translator.py` or `xml_utils.py`
-**Lookup table problems:** `util_modules/utils/lookup.py`
-**Performance issues:** Check caching in `tab_helpers.py`
+**Translation issues:** `util_modules/core/translator.py` or `xml_parsers/xml_utils.py`
+**Lookup table problems:** `util_modules/utils/lookup.py` or `utils/caching/`
+**Cache issues:** `util_modules/utils/caching/lookup_cache.py`
+**NHS Terminology Server:** `util_modules/terminology_server/`
+**SNOMED code expansion:** `util_modules/terminology_server/expansion_service.py`
+**Performance issues:** Check caching in `tab_helpers.py` or `utils/caching/`
 **Main app workflow:** `streamlit_app.py`
 **Error handling:** `util_modules/common/error_handling.py`
 **XML parsing:** `util_modules/xml_parsers/`

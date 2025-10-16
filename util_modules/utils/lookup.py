@@ -1,5 +1,6 @@
 import streamlit as st
 from .github_loader import GitHubLookupLoader
+from .caching.lookup_cache import get_cached_emis_lookup
 import pandas as pd
 from typing import Dict, Tuple, Any, Optional, List
 import time
@@ -8,8 +9,26 @@ import hashlib
 
 @st.cache_data(ttl=3600)  # Cache for 1 hour
 def load_lookup_table():
-    """Load the lookup table using the GitHubLookupLoader class."""
+    """Load the lookup table using cache-first approach with GitHub fallback."""
     try:
+        # First try to use session state (if already loaded)
+        lookup_df = st.session_state.get('lookup_df')
+        emis_guid_col = st.session_state.get('emis_guid_col')
+        snomed_code_col = st.session_state.get('snomed_code_col')
+        version_info = st.session_state.get('lookup_version_info', {})
+        
+        # If we have session data, try to get cached data first
+        if lookup_df is not None and emis_guid_col is not None and snomed_code_col is not None:
+            try:
+                cached_data = get_cached_emis_lookup(lookup_df, snomed_code_col, emis_guid_col, version_info)
+                if cached_data is not None:
+                    # Use cached data - return what we already have in session
+                    return lookup_df, emis_guid_col, snomed_code_col, version_info
+            except Exception:
+                # Cache lookup failed, continue to GitHub fallback
+                pass
+        
+        # Fallback to GitHub API if no cache available
         # Get secrets from Streamlit configuration
         url = st.secrets["LOOKUP_TABLE_URL"]
         token = st.secrets["GITHUB_TOKEN"]
@@ -25,7 +44,7 @@ def load_lookup_table():
         elif "expires soon" in status.lower():
             st.info(f"📅 Token Status: {status}")
         
-        # Load the lookup table with version info
+        # Load the lookup table with version info from GitHub
         return loader.load_lookup_table()
         
     except KeyError as e:

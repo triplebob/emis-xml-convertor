@@ -263,6 +263,52 @@ def render_debug_controls() -> None:
                         mime="application/json"
                     )
             
+            # Cache Generation Section
+            st.markdown("---")
+            st.markdown("**⚡ Cache Generation**")
+            
+            # Generate GitHub cache button
+            if st.button("🔨 Generate Cache"):
+                st.info("🔐 Cache will be encrypted using GZIP_TOKEN from secrets")
+                try:
+                    # Import required modules
+                    from .caching.lookup_cache import generate_cache_for_github
+                    import os
+                    
+                    # Get lookup table data
+                    lookup_df = st.session_state.get('lookup_df')
+                    snomed_code_col = st.session_state.get('snomed_code_col', 'SNOMED Code')
+                    emis_guid_col = st.session_state.get('emis_guid_col', 'EMIS GUID')
+                    version_info = st.session_state.get('lookup_version_info')
+                    
+                    if lookup_df is None or lookup_df.empty:
+                        st.error("❌ No lookup table loaded. Please check that the app has loaded the lookup table.")
+                    else:
+                        with st.spinner("Generating EMIS lookup cache for GitHub..."):
+                            # Create .cache directory if it doesn't exist
+                            cache_dir = ".cache"
+                            os.makedirs(cache_dir, exist_ok=True)
+                            
+                            # Generate the cache
+                            success = generate_cache_for_github(
+                                lookup_df=lookup_df,
+                                snomed_code_col=snomed_code_col,
+                                emis_guid_col=emis_guid_col,
+                                output_dir=cache_dir,
+                                version_info=version_info
+                            )
+                            
+                            if success:
+                                st.success("✅ Encrypted GitHub cache generated successfully!")
+                                st.info("💡 Check the `.cache/` directory for the generated encrypted file. Commit and push it to make it available to all users.")
+                            else:
+                                st.error("❌ Failed to generate GitHub cache")
+                
+                except Exception as e:
+                    st.error(f"❌ Cache generation failed: {str(e)}")
+            
+            st.caption("💡 Generates pre-built cache for GitHub deployment - saves build time for all users")
+            
             # Test Runner Section
             st.markdown("---")
             st.markdown("**🧪 Test Runner**")

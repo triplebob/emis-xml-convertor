@@ -206,6 +206,7 @@ def main():
     lookup_df = st.session_state.get('lookup_df')
     emis_guid_column = st.session_state.get('emis_guid_col')
     snomed_code_column = st.session_state.get('snomed_code_col')
+    version_info = st.session_state.get('lookup_version_info')
     
     # Header and upload section in columns
     col1, col2 = st.columns([2, 1])
@@ -216,7 +217,6 @@ def main():
         st.markdown("*Comprehensive EMIS XML analysis and clinical code extraction for healthcare teams*")
         
         # Dynamic MKB version text
-        version_info = st.session_state.get('version_info', {})
         mkb_version = version_info.get('emis_version', 'the latest MKB lookup table')
         if mkb_version != 'the latest MKB lookup table':
             mkb_text = f"MKB {mkb_version}"
@@ -316,12 +316,6 @@ def main():
                         # Store emis_guids in session state for potential reprocessing
                         st.session_state.emis_guids = emis_guids
                         
-                        if progress_bar:
-                            progress_bar.progress(25, text=f"Found {len(emis_guids)} GUIDs, preparing translation...")
-                        
-                        # Show progress as toast notification
-                        st.toast(f"Analyzing XML structure and extracting clinical data...", icon="⚙️")
-                        
                         # Log parsing results
                         if debug_logger:
                             debug_logger.log_xml_parsing_result(emis_guids)
@@ -331,6 +325,33 @@ def main():
                                 debug_logger.log_error(Exception("No EMIS GUIDs found"), "XML parsing")
                             st.error("No EMIS GUIDs found in the XML file")
                             return
+                        
+                        # Check if EMIS lookup cache needs building for terminology server integration
+                        from util_modules.utils.caching.lookup_cache import build_emis_lookup_cache, get_cache_info
+                        
+                        cache_info = get_cache_info(lookup_df, version_info)
+                        
+                        if cache_info["status"] == "not_cached":
+                            # Cache needs building - show progress
+                            if progress_bar:
+                                progress_bar.progress(20, text="Building EMIS lookup cache for terminology server (first time)...")
+                            
+                            cache_built = build_emis_lookup_cache(lookup_df, snomed_code_col, emis_guid_col, version_info)
+                            
+                            if cache_built:
+                                st.toast("✅ EMIS lookup cache built for terminology server optimization", icon="⚡")
+                        elif cache_info["status"] == "cached":
+                            # Cache already exists - no delay needed
+                            cache_built = True
+                        else:
+                            # Cache check failed - try to build anyway
+                            cache_built = build_emis_lookup_cache(lookup_df, snomed_code_col, emis_guid_col, version_info)
+                        
+                        if progress_bar:
+                            progress_bar.progress(25, text=f"Found {len(emis_guids)} GUIDs, preparing translation...")
+                        
+                        # Show progress as toast notification
+                        st.toast(f"Analyzing XML structure and extracting clinical data...", icon="⚙️")
                         
                         # Translate to SNOMED codes with progress tracking
                         if progress_bar:

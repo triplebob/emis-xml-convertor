@@ -1,5 +1,119 @@
 # Changelog
 
+## v2.1.0 - NHS Terminology Server Integration & Cache Architecture (October 2025)
+
+### 🌳 **NHS England Terminology Server Integration**
+
+**FHIR R4 API Integration:**
+- **System-to-System Authentication**: OAuth2 integration with NHS England Terminology Server
+- **SNOMED Code Expansion**: Automatic expansion of codes with `includechildren=True` flags
+- **Hierarchical Discovery**: Retrieves all descendant concepts (children, grandchildren, etc.)
+- **Individual Code Lookup**: Testing and validation functionality for specific concepts
+- **Real-time Status Monitoring**: Connection status tracking with toast notifications
+
+**EMIS Integration & Comparison:**
+- **Lookup Table Mapping**: Maps expanded concepts to EMIS GUIDs using cached lookup table
+- **Child Count Comparison**: Shows EMIS expected vs NHS Terminology Server actual child counts
+- **Discrepancy Analysis**: Identifies differences between EMIS lookup data and current terminology server
+- **Source File Tracking**: Links expansion results to original XML files for traceability
+
+**Export Capabilities:**
+- **Multiple CSV Formats**: Summary results, SNOMED-only codes, EMIS import-ready data
+- **Hierarchical JSON Export**: Parent-child relationships in structured format with metadata
+- **XML Output Generation**: Copy-paste ready XML for direct EMIS query implementation
+- **Professional Data Cleaning**: Sanitized exports for business and clinical use
+
+### ⚡ **Cache Architecture Overhaul**
+
+**Cache-First Strategy Implementation:**
+- **Multi-Tier Caching**: Session state → local cache → GitHub cache → API fallback
+- **Lookup Table Optimization**: Comprehensive audit and update of all GitHub API calls
+- **Performance Improvements**: Faster startup and reduced API dependencies
+- **Session Persistence**: Expansion results maintained across download operations
+
+**Technical Infrastructure:**
+- **Local Cache Priority**: Fastest possible access to frequently used data
+- **GitHub Cache Distribution**: Pre-built cache files for common lookup tables
+- **Fallback Reliability**: Graceful degradation when caches unavailable
+- **Cache Health Monitoring**: Automatic validation and regeneration as needed
+
+### 📊 **Enhanced Export System**
+
+**Terminology Server Exports:**
+- **Expansion Summary CSV**: Detailed results with success/failure status and timestamps
+- **Child Codes Export**: Clean SNOMED codes and descriptions for analysis
+- **EMIS Implementation CSV**: Child codes with EMIS GUID mappings for direct implementation
+- **Hierarchical JSON**: Parent-child relationships with source file metadata
+
+**Export Improvements:**
+- **Data Type Consistency**: Fixed Arrow serialization issues for mixed data types
+- **Results Persistence**: Exports remain available during download operations
+- **Source Attribution**: Complete traceability to original XML files
+- **View Mode Integration**: Export filenames reflect unique vs per-source mode selection
+
+### 🎨 **Interface Enhancements**
+
+**NHS Terminology Server UI:**
+- **Dedicated Tab Interface**: Complete terminology expansion interface in Clinical Codes section
+- **Progress Tracking**: Real-time feedback during large hierarchy expansions
+- **Detailed Results Table**: Comprehensive display with EMIS vs terminology server comparison
+- **Status Integration**: Sidebar monitoring with automatic connection updates
+
+**User Experience Improvements:**
+- **Streamlined Authentication**: Removed redundant connection testing from main interface
+- **Enhanced Status Reporting**: Clear success/failure indicators with detailed error messages
+- **Improved Navigation**: Consistent interface patterns across terminology features
+- **Results Organization**: Clear categorization of expansion results and export options
+
+### 🔧 **Technical Enhancements**
+
+**System Architecture:**
+- **Codebase Audit**: Systematic review and optimization of all GitHub API integrations
+- **Error Handling**: Enhanced error reporting and recovery mechanisms
+- **Data Validation**: Improved handling of mixed data types and edge cases
+- **Memory Management**: Optimized session state usage for large expansion results
+
+**Integration Points:**
+- **Cache-First Lookup Access**: All terminology server operations use optimized lookup table access
+- **Session State Management**: Persistent results across UI interactions and exports
+- **Background Processing**: Non-blocking expansion operations with progress feedback
+- **Cross-Component Integration**: Seamless integration with existing clinical codes pipeline
+
+### 💡 **User Benefits**
+
+**Clinical Workflow Support:**
+- **Complete Hierarchy Discovery**: Ensures no relevant child concepts are missed in EMIS implementations
+- **Implementation Guidance**: Direct XML output for copy-paste into EMIS searches
+- **Data Validation**: Compare EMIS expectations with current NHS terminology data
+- **Time Savings**: Automated discovery vs manual hierarchy traversal
+
+**Technical Reliability:**
+- **Faster Performance**: Cache-first approach reduces loading times significantly
+- **Offline Capability**: Local caching enables operation when GitHub API unavailable
+- **Data Consistency**: Reliable access to lookup table data across all features
+- **Export Integrity**: Professional, clean data exports for clinical and business use
+
+---
+
+### **Migration Notes**
+
+**Full Backward Compatibility:**
+- All existing XML processing workflows remain unchanged
+- Enhanced functionality available immediately without configuration
+- Existing lookup table integrations automatically benefit from cache optimization
+- No changes required to existing user workflows
+
+**New Requirements (Optional):**
+- NHS England System-to-System credentials required for terminology server features
+- Credentials configured in `.streamlit/secrets.toml` for terminology expansion
+- Internet connectivity required for terminology server operations
+
+---
+
+*Version 2.1.0 introduces comprehensive NHS terminology integration while significantly improving system performance through cache architecture optimization.*
+
+---
+
 ## v2.0.1 - Performance & UI Improvements (October 2025)
 
 ### 🚀 **Performance Optimizations**
@@ -287,5 +401,5 @@ v2.0.0 represents a complete evolution into a comprehensive EMIS XML analysis pl
 ---
 
 *Last Updated: October 2025*  
-*Application Version: 2.0.0*  
+*Application Version: 2.1.0*  
 *Live at: https://emis-xml-toolkit.streamlit.app/*
