@@ -737,7 +737,11 @@ class SearchExportHandler:
                 details.append("Rebuild: Add restriction for 'Earliest records only'")
         
         # Current status indicators
-        if col_filter.get('column', '').upper() in ['CURRENT', 'IS_CURRENT', 'STATUS']:
+        column_check = col_filter.get('column', '')
+        if isinstance(column_check, list):
+            column_check = ' + '.join(column_check) if column_check else ''
+        
+        if column_check.upper() in ['CURRENT', 'IS_CURRENT', 'STATUS']:
             details.append("Status Filter: Current/Active records only")
             details.append("Rebuild: Enable 'Current records only' checkbox")
         elif column_name == 'EPISODE':
@@ -1116,6 +1120,11 @@ class SearchExportHandler:
             return "No filter"
         
         column = col_filter.get('column', 'Unknown')
+        
+        # Handle case where column might be a list
+        if isinstance(column, list):
+            column = ' + '.join(column) if column else 'Unknown'
+        
         display_name = col_filter.get('display_name', column)
         
         # EMIS-style clinical filter descriptions

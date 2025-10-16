@@ -158,7 +158,10 @@ class ReportExportHandler:
                 # Column filters (date restrictions, etc.)
                 column_filters = criterion.get('column_filters', [])
                 for filter_item in column_filters:
-                    filter_column = filter_item.get('column', '').upper()
+                    filter_column = filter_item.get('column', '')
+                    if isinstance(filter_column, list):
+                        filter_column = ' + '.join(filter_column) if filter_column else ''
+                    filter_column = filter_column.upper()
                     if 'DATE' in filter_column:
                         range_info = filter_item.get('range', {})
                         if range_info:
@@ -388,7 +391,10 @@ class ReportExportHandler:
                             # Extract actual filter information
                             column_filters = criterion.get('column_filters', [])
                             for filter_item in column_filters:
-                                filter_column = filter_item.get('column', '').upper()
+                                filter_column = filter_item.get('column', '')
+                    if isinstance(filter_column, list):
+                        filter_column = ' + '.join(filter_column) if filter_column else ''
+                    filter_column = filter_column.upper()
                                 if 'DATE' in filter_column:
                                     range_info = filter_item.get('range', {})
                                     if range_info:
