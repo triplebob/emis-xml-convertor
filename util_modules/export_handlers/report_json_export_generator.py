@@ -558,7 +558,13 @@ class ReportJSONExportGenerator:
     def _build_filter_constraints_complete(self, col_filter) -> Dict[str, Any]:
         """Build complete filter constraints with SQL-ready logic (shared with search export)"""
         constraints = {}
-        column = col_filter.get('column', '').upper()
+        column = col_filter.get('column', '')
+        
+        # Handle case where column might be a list
+        if isinstance(column, list):
+            column = ' + '.join(column) if column else ''
+        
+        column = column.upper()
         
         # Date/range constraints using the same format as search_export.py
         if col_filter.get('range'):

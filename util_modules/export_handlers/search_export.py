@@ -658,7 +658,13 @@ class SearchExportHandler:
                 details.append(f"Values (partial): {values_str}")
         
         # Context-specific rebuild instructions based on column type
-        column_name = col_filter.get('column', '').upper()
+        column_name = col_filter.get('column', '')
+        
+        # Handle case where column might be a list
+        if isinstance(column_name, list):
+            column_name = ' + '.join(column_name) if column_name else ''
+        
+        column_name = column_name.upper()
         
         # Clinical coding - specific instructions for rebuild
         if column_name in ['READCODE', 'SNOMEDCODE']:
