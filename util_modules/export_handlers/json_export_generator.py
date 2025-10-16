@@ -285,15 +285,15 @@ class JSONExportGenerator:
         
         for restriction in restrictions:
             restriction_data = {
-                "restriction_type": restriction.restriction_type,
-                "count": restriction.count,
+                "restriction_type": restriction.type,
+                "count": getattr(restriction, 'count', getattr(restriction, 'record_count', None)),
                 "time_constraint": {
                     "period": getattr(restriction, 'time_period', None),
                     "unit": getattr(restriction, 'time_unit', None)
                 },
                 "sort_order": getattr(restriction, 'sort_order', 'DESC'),
                 "conditional_where": self._build_where_conditions_complete(restriction),
-                "sql_pattern": f"{restriction.restriction_type} {restriction.count}"
+                "sql_pattern": f"{restriction.type} {getattr(restriction, 'count', getattr(restriction, 'record_count', ''))}"
             }
             restriction_list.append(restriction_data)
         
