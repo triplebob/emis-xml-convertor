@@ -1039,9 +1039,9 @@ class ReportJSONExportGenerator:
                 if hasattr(group, 'population_criteria') and group.population_criteria:
                     for pop_crit in group.population_criteria:
                         dependencies["referenced_searches"].append({
-                            "search_id": pop_crit.search_guid,
-                            "search_name": pop_crit.search_name,
-                            "inclusion_type": pop_crit.inclusion_type
+                            "search_id": pop_crit.report_guid,
+                            "search_name": getattr(pop_crit, 'search_name', 'Unknown'),
+                            "inclusion_type": getattr(pop_crit, 'inclusion_type', 'INCLUDE')
                         })
         
         return dependencies
