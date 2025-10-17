@@ -6,6 +6,7 @@ Centralizes and enhances export functionality across all UI tabs
 import streamlit as st
 import pandas as pd
 import io
+import gc
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Callable
 from .clinical_code_export import ClinicalCodeExportHandler
@@ -130,6 +131,13 @@ class UIExportManager:
                 key=f"export_{section_name}_csv"
             )
             
+            # Clear cache after export to free memory
+            del df, csv_buffer
+            
+            # Force cache clearing for large CSV exports
+            if len(data) > 10000:  # Large export threshold
+                self.clear_export_cache()
+            
         elif export_type == 'excel':
             filename = self._generate_filename(section_name, 'xlsx')
             df = pd.DataFrame(data)
@@ -154,6 +162,13 @@ class UIExportManager:
                 key=f"export_{section_name}_excel"
             )
             
+            # Clear cache after export to free memory
+            del df, output
+            
+            # Force cache clearing for large Excel exports
+            if len(data) > 5000:  # Excel is heavier, lower threshold
+                self.clear_export_cache()
+            
         elif export_type == 'json':
             import json
             filename = self._generate_filename(section_name, 'json')
@@ -172,6 +187,22 @@ class UIExportManager:
                 mime="application/json",
                 key=f"export_{section_name}_json"
             )
+            
+            # Clear cache after export to free memory
+            del export_data
+    
+    def clear_export_cache(self):
+        """Clear Streamlit caches and force garbage collection after large exports"""
+        try:
+            # Clear Streamlit caches to free memory
+            st.cache_data.clear()
+            
+            # Force garbage collection
+            gc.collect()
+            
+        except Exception:
+            # Silently handle cache clearing errors
+            pass
     
     def _generate_filename(self, section_name: str, extension: str) -> str:
         """Generate standardized filename"""

@@ -282,16 +282,27 @@ def build_emis_lookup_cache(lookup_df: pd.DataFrame, snomed_code_col: str, emis_
             _save_local_cache(github_cache, table_hash)
             return True
         
-        # Build comprehensive lookup data
+        # Build comprehensive lookup data - preserve ALL records
         emis_lookup = {}
         lookup_records = {}
+        all_records = []  # Store complete DataFrame records
         lookup_count = 0
+        valid_mapping_count = 0
         
-        for _, row in lookup_df.iterrows():
+        for index, row in lookup_df.iterrows():
+            lookup_count += 1
+            
+            # Store complete record for DataFrame reconstruction
+            record_dict = {}
+            for col in lookup_df.columns:
+                record_dict[col] = row.get(col, '')
+            all_records.append(record_dict)
+            
+            # Also build mapping dictionaries for valid records only
             snomed_code_raw = str(row.get(snomed_code_col, '')).strip()
             emis_guid = str(row.get(emis_guid_col, '')).strip()
             if snomed_code_raw and emis_guid and snomed_code_raw != 'nan':
-                lookup_count += 1
+                valid_mapping_count += 1
                 
                 # Normalize SNOMED code by removing .0 suffix if present
                 snomed_code = snomed_code_raw[:-2] if snomed_code_raw.endswith('.0') else snomed_code_raw
@@ -319,14 +330,16 @@ def build_emis_lookup_cache(lookup_df: pd.DataFrame, snomed_code_col: str, emis_
         # Step 3: Build cache from scratch
         # Save to local cache
         cache_data = {
-            'lookup_mapping': emis_lookup,  # SNOMED -> EMIS GUID mapping
-            'lookup_records': lookup_records,  # SNOMED -> full record data
+            'lookup_mapping': emis_lookup,  # SNOMED -> EMIS GUID mapping (valid only)
+            'lookup_records': lookup_records,  # SNOMED -> full record data (valid only)
+            'all_records': all_records,  # Complete DataFrame records (ALL records)
             'column_names': {
                 'snomed': snomed_code_col,
                 'emis': emis_guid_col
             },
             'created_at': datetime.now().isoformat(),
-            'record_count': lookup_count,
+            'record_count': lookup_count,  # Total records
+            'valid_mapping_count': valid_mapping_count,  # Valid mappings only
             'table_hash': table_hash,
             'available_columns': list(lookup_df.columns)
         }
@@ -340,6 +353,88 @@ def build_emis_lookup_cache(lookup_df: pd.DataFrame, snomed_code_col: str, emis_
         # If cache building fails, log but don't crash
         st.warning(f"Could not build EMIS lookup cache: {str(e)}")
         return False
+
+
+def get_latest_cached_emis_lookup() -> Optional[Tuple[pd.DataFrame, str, str, Dict]]:
+    """
+    Load the latest cached EMIS lookup table data without requiring hash validation
+    Scans local cache directory for the most recent cache file
+    
+    Returns:
+        Tuple of (lookup_df, emis_guid_col, snomed_code_col, version_info) or None if not cached
+    """
+    try:
+        cache_dir = _get_cache_directory()
+        
+        # Find all cache files
+        cache_files = []
+        for filename in os.listdir(cache_dir):
+            if filename.startswith("emis_lookup_") and filename.endswith(".pkl"):
+                cache_file = os.path.join(cache_dir, filename)
+                mtime = os.path.getmtime(cache_file)
+                cache_files.append((mtime, cache_file, filename))
+        
+        if not cache_files:
+            return None
+        
+        # Sort by modification time (newest first)
+        cache_files.sort(reverse=True)
+        latest_cache_file = cache_files[0][1]
+        # Load the latest cache file
+        with open(latest_cache_file, 'rb') as f:
+            encrypted_data = f.read()
+            
+        # Decrypt and decompress
+        try:
+            decrypted_data = _decrypt_data(encrypted_data)
+            cached_data = pickle.loads(gzip.decompress(decrypted_data))
+        except Exception:
+            # Fallback for old formats
+            try:
+                cached_data = pickle.loads(gzip.decompress(encrypted_data))
+            except (gzip.BadGzipFile, OSError):
+                cached_data = pickle.loads(encrypted_data)
+        
+        # Validate cache structure
+        if (isinstance(cached_data, dict) and 
+            'lookup_mapping' in cached_data and 
+            'lookup_records' in cached_data and
+            'column_names' in cached_data):
+            
+            emis_guid_col = cached_data['column_names']['emis']
+            snomed_code_col = cached_data['column_names']['snomed']
+            
+            # Use complete records if available (new format), otherwise reconstruct from lookup_records (old format)
+            if 'all_records' in cached_data:
+                # New format - use complete DataFrame records
+                lookup_df = pd.DataFrame(cached_data['all_records'])
+            else:
+                # Old format - reconstruct from filtered records (backward compatibility)
+                records = []
+                for snomed_code, record_data in cached_data['lookup_records'].items():
+                    record = {snomed_code_col: snomed_code}
+                    record[emis_guid_col] = record_data['emis_guid']
+                    # Add other columns
+                    for col, value in record_data.items():
+                        if col not in ['emis_guid']:
+                            record[col] = value
+                    records.append(record)
+                lookup_df = pd.DataFrame(records)
+            
+            # Create version info from cache metadata
+            version_info = {
+                'cache_created_at': cached_data.get('created_at', ''),
+                'record_count': cached_data.get('record_count', len(lookup_df)),
+                'table_hash': cached_data.get('table_hash', ''),
+                'available_columns': cached_data.get('available_columns', [])
+            }
+            
+            return lookup_df, emis_guid_col, snomed_code_col, version_info
+            
+    except Exception:
+        pass
+    
+    return None
 
 
 def get_cached_emis_lookup(lookup_df: pd.DataFrame, snomed_code_col: str, emis_guid_col: str, version_info: Dict = None) -> Optional[Dict]:
@@ -472,16 +567,27 @@ def generate_cache_for_github(lookup_df: pd.DataFrame, snomed_code_col: str, emi
         print(f"Building encrypted EMIS lookup cache for GitHub deployment...")
         print(f"Processing {len(lookup_df)} lookup table records...")
         
-        # Build comprehensive lookup data (same logic as build_emis_lookup_cache)
+        # Build comprehensive lookup data - preserve ALL records (same logic as build_emis_lookup_cache)
         emis_lookup = {}
         lookup_records = {}
+        all_records = []  # Store complete DataFrame records
         lookup_count = 0
+        valid_mapping_count = 0
         
-        for _, row in lookup_df.iterrows():
+        for index, row in lookup_df.iterrows():
+            lookup_count += 1
+            
+            # Store complete record for DataFrame reconstruction
+            record_dict = {}
+            for col in lookup_df.columns:
+                record_dict[col] = row.get(col, '')
+            all_records.append(record_dict)
+            
+            # Also build mapping dictionaries for valid records only
             snomed_code_raw = str(row.get(snomed_code_col, '')).strip()
             emis_guid = str(row.get(emis_guid_col, '')).strip()
             if snomed_code_raw and emis_guid and snomed_code_raw != 'nan':
-                lookup_count += 1
+                valid_mapping_count += 1
                 
                 # Normalize SNOMED code by removing .0 suffix if present
                 snomed_code = snomed_code_raw[:-2] if snomed_code_raw.endswith('.0') else snomed_code_raw
@@ -508,14 +614,16 @@ def generate_cache_for_github(lookup_df: pd.DataFrame, snomed_code_col: str, emi
         
         # Create cache data structure
         cache_data = {
-            'lookup_mapping': emis_lookup,  # SNOMED -> EMIS GUID mapping
-            'lookup_records': lookup_records,  # SNOMED -> full record data
+            'lookup_mapping': emis_lookup,  # SNOMED -> EMIS GUID mapping (valid only)
+            'lookup_records': lookup_records,  # SNOMED -> full record data (valid only)
+            'all_records': all_records,  # Complete DataFrame records (ALL records)
             'column_names': {
                 'snomed': snomed_code_col,
                 'emis': emis_guid_col
             },
             'created_at': datetime.now().isoformat(),
-            'record_count': lookup_count,
+            'record_count': lookup_count,  # Total records
+            'valid_mapping_count': valid_mapping_count,  # Valid mappings only
             'table_hash': table_hash,
             'available_columns': list(lookup_df.columns)
         }

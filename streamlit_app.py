@@ -17,6 +17,7 @@ import os
 import xml.etree.ElementTree as ET
 
 
+@st.cache_data(ttl=1800, max_entries=50)  # Cache XML processing for 30 minutes
 def extract_codes_with_separate_parsers(xml_content):
     """
     Extract EMIS GUIDs using separate search and report parsers while maintaining architectural separation.
@@ -329,23 +330,29 @@ def main():
                         # Check if EMIS lookup cache needs building for terminology server integration
                         from util_modules.utils.caching.lookup_cache import build_emis_lookup_cache, get_cache_info
                         
-                        cache_info = get_cache_info(lookup_df, version_info)
-                        
-                        if cache_info["status"] == "not_cached":
-                            # Cache needs building - show progress
-                            if progress_bar:
-                                progress_bar.progress(20, text="Building EMIS lookup cache for terminology server (first time)...")
-                            
-                            cache_built = build_emis_lookup_cache(lookup_df, snomed_code_col, emis_guid_col, version_info)
-                            
-                            if cache_built:
-                                st.toast("✅ EMIS lookup cache built for terminology server optimization", icon="⚡")
-                        elif cache_info["status"] == "cached":
-                            # Cache already exists - no delay needed
+                        # Skip cache building if we already loaded from cache
+                        load_source = version_info.get('load_source', 'unknown')
+                        if load_source == 'cache':
+                            # We already loaded from cache, no need to rebuild
                             cache_built = True
                         else:
-                            # Cache check failed - try to build anyway
-                            cache_built = build_emis_lookup_cache(lookup_df, snomed_code_col, emis_guid_col, version_info)
+                            cache_info = get_cache_info(lookup_df, version_info)
+                            
+                            if cache_info["status"] == "not_cached":
+                                # Cache needs building - show progress
+                                if progress_bar:
+                                    progress_bar.progress(20, text="Building EMIS lookup cache for terminology server (first time)...")
+                                
+                                cache_built = build_emis_lookup_cache(lookup_df, snomed_code_col, emis_guid_col, version_info)
+                                
+                                if cache_built:
+                                    st.toast("✅ EMIS lookup cache built for terminology server optimization", icon="⚡")
+                            elif cache_info["status"] == "cached":
+                                # Cache already exists - no delay needed
+                                cache_built = True
+                            else:
+                                # Cache check failed - try to build anyway
+                                cache_built = build_emis_lookup_cache(lookup_df, snomed_code_col, emis_guid_col, version_info)
                         
                         if progress_bar:
                             progress_bar.progress(25, text=f"Found {len(emis_guids)} GUIDs, preparing translation...")

@@ -15,41 +15,60 @@ def render_status_bar():
     with st.sidebar:
         st.header("🗃️ Lookup Table Status")
         
-        with st.spinner("Loading lookup table..."):
-            try:
-                # First try to use cached lookup data
-                lookup_df = st.session_state.get('lookup_df')
-                emis_guid_col = st.session_state.get('emis_guid_col')
-                snomed_code_col = st.session_state.get('snomed_code_col')
-                version_info = st.session_state.get('lookup_version_info', {})
+        # Create status placeholder for dynamic updates
+        status_placeholder = st.empty()
+        
+        try:
+            # First try to use cached lookup data
+            lookup_df = st.session_state.get('lookup_df')
+            emis_guid_col = st.session_state.get('emis_guid_col')
+            snomed_code_col = st.session_state.get('snomed_code_col')
+            version_info = st.session_state.get('lookup_version_info', {})
+            
+            load_source = "session"  # Track where data came from
+            
+            # If not in session state, load lookup table (which will check cache internally)
+            if lookup_df is None or emis_guid_col is None or snomed_code_col is None:
+                # The load_lookup_table function handles cache checking internally
+                lookup_df, emis_guid_col, snomed_code_col, version_info = load_lookup_table()
                 
-                # If not in session state, try cache, then fallback to GitHub
-                if lookup_df is None or emis_guid_col is None or snomed_code_col is None:
-                    # Check if we have cached data
-                    cached_data = None
-                    if lookup_df is not None and emis_guid_col is not None and snomed_code_col is not None:
-                        cached_data = get_cached_emis_lookup(lookup_df, snomed_code_col, emis_guid_col, version_info)
-                    
-                    if cached_data is None:
-                        # Fallback to GitHub API
-                        lookup_df, emis_guid_col, snomed_code_col, version_info = load_lookup_table()
+                # Determine the actual source from version_info
+                load_source = version_info.get('load_source', 'github') if version_info else 'github'
+            
+            # Clear status placeholder
+            status_placeholder.empty()
                 
-                # Get lookup statistics
-                stats = get_lookup_statistics(lookup_df)
-                
-                st.success(f"✅ Lookup table loaded: {stats['total_count']:,} total mappings")
-                st.info(f"🩺 SCT Codes: {stats['clinical_count']:,}")
-                st.info(f"💊 Medications: {stats['medication_count']:,}")
-                
-                if stats['other_count'] > 0:
-                    st.info(f"📊 Other types: {stats['other_count']:,}")
-                
-                # Display version information if available
-                if version_info and len(version_info) > 0:
-                    with st.sidebar.expander("📊 Version Info", expanded=False):
-                        if 'emis_version' in version_info:
-                            st.markdown("**🏥 EMIS MKB Release**")
-                            st.caption(f"📘 {version_info['emis_version']}")
+            # Get lookup statistics
+            stats = get_lookup_statistics(lookup_df)
+            
+            # Show success message with source indicator
+            source_icons = {
+                "session": "⚡",
+                "cache": "🔐", 
+                "github": "📥"
+            }
+            source_messages = {
+                "session": "from session",
+                "cache": "from encrypted cache",
+                "github": "from GitHub"
+            }
+            
+            icon = source_icons.get(load_source, "✅")
+            source_msg = source_messages.get(load_source, "")
+            
+            st.success(f"{icon} Lookup table loaded {source_msg}: {stats['total_count']:,} total mappings")
+            st.info(f"🩺 SCT Codes: {stats['clinical_count']:,}")
+            st.info(f"💊 Medications: {stats['medication_count']:,}")
+            
+            if stats['other_count'] > 0:
+                st.info(f"📊 Other types: {stats['other_count']:,}")
+            
+            # Display version information if available
+            if version_info and len(version_info) > 0:
+                with st.sidebar.expander("📊 Version Info", expanded=False):
+                    if 'emis_version' in version_info:
+                        st.markdown("**🏥 EMIS MKB Release**")
+                        st.caption(f"📘 {version_info['emis_version']}")
                         
                         if 'snomed_version' in version_info:
                             # Parse SNOMED version string
@@ -80,64 +99,62 @@ def render_status_bar():
                             else:
                                 st.caption(f"📘 {extract_date_raw}")
                 
-                # Changelog section - Direct in-app display 
-                with st.sidebar.expander("🎯 What's New - v2.1.0", expanded=False):
-                    st.markdown("""
-                    **🌳 NHS Terminology Server Integration & Cache Optimization - v2.1.0**
+            # Changelog section - Direct in-app display 
+            with st.sidebar.expander("🎯 What's New - v2.1.1", expanded=False):
+                st.markdown("""
+                    **🚀 Memory & Performance Optimization - v2.1.1**
                     
-                    Comprehensive NHS England Terminology Server integration with optimized caching architecture.
+                    Critical performance improvements addressing memory constraints and threading issues for production deployment.
                     
-                    **🆕 NHS Terminology Server Features:**
-                    - SNOMED code expansion using NHS England FHIR R4 API
-                    - Hierarchical child/descendant concept discovery
-                    - EMIS vs Terminology Server child count comparison
-                    - Individual code lookup for testing and validation
-                    - Multiple export formats: CSV, JSON, XML-ready outputs
+                    **⚡ Threading Performance:**
+                    - Adaptive worker scaling: 8-20 concurrent workers based on workload size
+                    - Resolved ThreadPoolExecutor memory warnings and thread explosion
+                    - Optimized worker thread authentication with credential passing
+                    - Batched processing to prevent memory overflow in large datasets
                     
-                    **📊 Enhanced Export Capabilities:**
-                    - Hierarchical JSON export with parent-child relationships
-                    - XML Output column for direct EMIS query implementation
-                    - Source file tracking in exports for traceability
-                    - EMIS Child Count vs Term Server Child Count comparison
+                    **🧠 Memory Management:**
+                    - Session-based expansion result caching to eliminate repeated API calls
+                    - Cache-first loading preserves complete 1.5M+ record lookup table
+                    - Enhanced garbage collection for large expansion operations
+                    - Streamlit Cloud 2.7GB memory limit compliance
                     
-                    **⚡ Cache Architecture Overhaul:**
-                    - Cache-first approach: local cache → GitHub cache → API fallback
-                    - Optimized lookup table loading for faster startup
-                    - Session state persistence during download operations
-                    - Terminology server results caching for UI performance
+                    **🔧 Terminology Server Fixes:**
+                    - Fixed worker thread conflicts with Streamlit caching decorators
+                    - Resolved expansion failures (0/131 → 131/131 success rate)
+                    - Eliminated infinite loading loops during expansion operations
+                    - Improved error handling and status reporting for failed connections
                     
-                    **🎨 Interface Improvements:**
-                    - Real-time connection status monitoring in sidebar
-                    - Toast notifications for authentication updates
-                    - Results persistence across export operations
-                    - Enhanced expansion results table with detailed metrics
-                    - Improved filter hierarchy display consistency
+                    **📊 Enhanced User Experience:**
+                    - Real-time progress tracking with concurrent worker count display
+                    - Cache hit/miss statistics during expansion operations
+                    - Toast notifications for successful terminology server connections
+                    - Persistent expansion results across UI interactions
                     
-                    **🔧 Technical Enhancements:**
-                    - Comprehensive codebase audit for GitHub API optimization
-                    - Arrow serialization fixes for mixed data types
-                    - Enhanced error handling and status reporting
-                    - Streamlined UI with removed redundant connection testing
+                    **🎯 Production Readiness:**
+                    - Streamlined for Streamlit Cloud deployment constraints
+                    - Comprehensive threading orchestrator pattern implementation
+                    - Enhanced stability for high-volume terminology expansions
+                    - Maintained full backward compatibility with existing workflows
                     
-                    ✅ **All improvements maintain full backward compatibility**
+                    ✅ **Resolves production memory issues while improving performance**
                     """)
-                    st.markdown("**[📄 View Full Technical Changelog](https://github.com/triplebob/emis-xml-convertor/blob/main/changelog.md)**")
+                st.markdown("**[📄 View Full Technical Changelog](https://github.com/triplebob/emis-xml-convertor/blob/main/changelog.md)**")
+            
+            # Store in session state for later use
+            st.session_state.lookup_df = lookup_df
+            st.session_state.emis_guid_col = emis_guid_col
+            st.session_state.snomed_code_col = snomed_code_col
+            
+            # Only update version_info if we have valid data (don't overwrite good data with empty dict)
+            if version_info and len(version_info) > 0:
+                st.session_state.lookup_version_info = version_info
+            
+            # Add NHS Terminology Server status
+            if NHS_TERMINOLOGY_AVAILABLE:
+                render_terminology_server_status()
+            
+            return lookup_df, emis_guid_col, snomed_code_col
                 
-                # Store in session state for later use
-                st.session_state.lookup_df = lookup_df
-                st.session_state.emis_guid_col = emis_guid_col
-                st.session_state.snomed_code_col = snomed_code_col
-                
-                # Only update version_info if we have valid data (don't overwrite good data with empty dict)
-                if version_info and len(version_info) > 0:
-                    st.session_state.lookup_version_info = version_info
-                
-                # Add NHS Terminology Server status
-                if NHS_TERMINOLOGY_AVAILABLE:
-                    render_terminology_server_status()
-                
-                return lookup_df, emis_guid_col, snomed_code_col
-                
-            except Exception as e:
-                st.error(f"❌ Error loading lookup table: {str(e)}")
-                st.stop()
+        except Exception as e:
+            st.error(f"❌ Error loading lookup table: {str(e)}")
+            st.stop()

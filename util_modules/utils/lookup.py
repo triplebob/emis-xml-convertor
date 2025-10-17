@@ -7,7 +7,21 @@ import time
 from functools import lru_cache
 import hashlib
 
-@st.cache_data(ttl=3600)  # Cache for 1 hour
+@st.cache_resource(ttl=7200, max_entries=1)  # Cache lookup dictionaries for 2 hours
+def get_cached_lookup_dictionaries():
+    """Get cached lookup dictionaries to avoid rebuilding them repeatedly."""
+    try:
+        lookup_df = st.session_state.get('lookup_df')
+        emis_guid_col = st.session_state.get('emis_guid_col', 'EMIS GUID')
+        snomed_code_col = st.session_state.get('snomed_code_col', 'SNOMED Code')
+        
+        if lookup_df is None:
+            return None, None
+            
+        return create_lookup_dictionaries(lookup_df, emis_guid_col, snomed_code_col)
+    except Exception:
+        return None, None
+
 def load_lookup_table():
     """Load the lookup table using cache-first approach with GitHub fallback."""
     try:
@@ -17,18 +31,28 @@ def load_lookup_table():
         snomed_code_col = st.session_state.get('snomed_code_col')
         version_info = st.session_state.get('lookup_version_info', {})
         
-        # If we have session data, try to get cached data first
+        # If we have session data, return it immediately
         if lookup_df is not None and emis_guid_col is not None and snomed_code_col is not None:
-            try:
-                cached_data = get_cached_emis_lookup(lookup_df, snomed_code_col, emis_guid_col, version_info)
-                if cached_data is not None:
-                    # Use cached data - return what we already have in session
-                    return lookup_df, emis_guid_col, snomed_code_col, version_info
-            except Exception:
-                # Cache lookup failed, continue to GitHub fallback
-                pass
+            return lookup_df, emis_guid_col, snomed_code_col, version_info
         
-        # Fallback to GitHub API if no cache available
+        # Try to load from local cache first (without needing GitHub data)
+        try:
+            from .caching.lookup_cache import get_latest_cached_emis_lookup
+            cached_result = get_latest_cached_emis_lookup()
+            if cached_result is not None:
+                lookup_df, emis_guid_col, snomed_code_col, version_info = cached_result
+                # Mark that we loaded from cache
+                version_info['load_source'] = 'cache'
+                return lookup_df, emis_guid_col, snomed_code_col, version_info
+            else:
+                # No cache available, will load from GitHub
+                st.info("📥 No local cache found, loading from GitHub...")
+        except Exception as e:
+            # Cache loading failed, continue to GitHub fallback
+            st.warning(f"🔍 Cache loading failed: {str(e)}, falling back to GitHub...")
+            pass
+        
+        # Load from GitHub API
         # Get secrets from Streamlit configuration
         url = st.secrets["LOOKUP_TABLE_URL"]
         token = st.secrets["GITHUB_TOKEN"]
@@ -45,7 +69,29 @@ def load_lookup_table():
             st.info(f"📅 Token Status: {status}")
         
         # Load the lookup table with version info from GitHub
-        return loader.load_lookup_table()
+        lookup_df, emis_guid_col, snomed_code_col, version_info = loader.load_lookup_table()
+        
+        # Mark that we loaded from GitHub
+        if version_info is None:
+            version_info = {}
+        version_info['load_source'] = 'github'
+        
+        # After loading from GitHub, try to build cache for next time
+        if lookup_df is not None and version_info:
+            try:
+                from .caching.lookup_cache import build_emis_lookup_cache
+                st.info("🔐 Building local cache for faster future loads...")
+                cache_built = build_emis_lookup_cache(lookup_df, snomed_code_col, emis_guid_col, version_info)
+                if cache_built:
+                    st.success("✅ Local cache built successfully")
+                else:
+                    st.warning("⚠️ Cache building failed but data loaded")
+            except Exception as e:
+                # Cache building failed, but we still have the data
+                st.warning(f"⚠️ Cache building error: {str(e)}")
+                pass
+        
+        return lookup_df, emis_guid_col, snomed_code_col, version_info
         
     except KeyError as e:
         raise Exception(f"Required secret not found: {e}. Please configure in Streamlit Cloud settings.")

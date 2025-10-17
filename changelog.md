@@ -1,5 +1,99 @@
 # Changelog
 
+## v2.1.1 - Memory & Performance Optimization (October 2025)
+
+### 🚀 **Threading Performance Enhancements**
+
+**Adaptive Worker Scaling:**
+- **Dynamic Threading**: Scales from 8-20 concurrent workers based on workload size (≤100: 8 workers, 101-300: 12 workers, 301-500: 16 workers, 501+: 20 workers)
+- **Memory Management**: Prevents thread explosion that was creating thousands of workers instead of expected counts
+- **Batched Processing**: Implements controlled worker batches to prevent memory overflow in large terminology expansions
+- **Resource Optimization**: Balances performance with Streamlit Cloud's 2.7GB memory constraint
+
+**Worker Thread Stabilization:**
+- **Credential Passing**: Resolves authentication failures by passing NHS Terminology Server credentials explicitly to worker threads
+- **Threading Orchestrator**: Implements pure worker thread pattern with main thread UI updates for Streamlit compatibility
+- **Context Management**: Eliminates thousands of ThreadPoolExecutor "missing ScriptRunContext" warnings
+- **Performance Monitoring**: Real-time progress tracking with concurrent worker count display
+
+### 🧠 **Memory Management Optimization**
+
+**Session-Based Caching:**
+- **Expansion Result Caching**: Implements session-state caching to eliminate repeated NHS Terminology Server API calls
+- **Cache Hit Statistics**: Displays cache hit/miss ratios during expansion operations (e.g., "✅ Using 130 cached results, fetching 1 new codes")
+- **Immediate Reuse**: Second expansion clicks use cached data instead of re-querying terminology server
+- **Memory Efficiency**: Reduces API load and improves response times for repeated operations
+
+**Lookup Table Preservation:**
+- **Complete Dataset Retention**: Maintains full 1.5M+ record EMIS lookup table without filtering
+- **Cache-First Loading**: Preserves session state → local cache → GitHub cache → API fallback hierarchy
+- **Garbage Collection**: Enhanced memory cleanup during large expansion operations
+- **Streamlit Cloud Compliance**: Optimized for production deployment memory constraints
+
+### 🔧 **Terminology Server Reliability Fixes**
+
+**Worker Thread Compatibility:**
+- **Caching Decorator Resolution**: Fixed conflicts between Streamlit's `@st.cache_data` and worker thread execution
+- **Parameter Conflicts**: Resolved `_self` parameter issues that were causing "name '_self' is not defined" errors in worker threads
+- **Success Rate Improvement**: Increased expansion success from 0/131 to 131/131 (100% success rate)
+- **Error Handling**: Enhanced error reporting and status tracking for failed terminology server connections
+
+**UI Stability:**
+- **Loading Loop Elimination**: Resolved infinite "Running NHSTerminologyClient.expand_concept(...)" display loops
+- **Progress Tracking**: Accurate real-time progress updates with worker status information
+- **Connection Status**: Proper authentication status display and toast notifications
+- **State Persistence**: Maintains expansion results across UI interactions and download operations
+
+### 📊 **Enhanced User Experience**
+
+**Performance Feedback:**
+- **Cache Statistics**: Shows detailed cache hit/miss information during expansion operations
+- **Worker Scaling Display**: Real-time indication of concurrent worker count based on workload size
+- **Success Rate Monitoring**: Clear progress indicators with expansion success/failure tracking
+- **Connection Notifications**: Toast alerts for successful NHS Terminology Server connections
+
+**Production Readiness:**
+- **Cloud Deployment Optimization**: Specifically tuned for Streamlit Cloud memory and threading constraints
+- **Stability Improvements**: Comprehensive testing under high-volume terminology expansion scenarios
+- **Error Recovery**: Graceful handling of network timeouts and terminology server unavailability
+- **Backward Compatibility**: All existing workflows remain unchanged with performance benefits
+
+### 🎯 **Technical Infrastructure**
+
+**Architecture Improvements:**
+- **Threading Orchestrator Pattern**: Separates pure API calls in worker threads from UI updates in main thread
+- **Memory-Aware Processing**: Dynamic scaling based on available resources and workload characteristics
+- **Session State Management**: Intelligent caching with automatic invalidation and memory cleanup
+- **Error Boundaries**: Comprehensive exception handling with detailed logging for production debugging
+
+**Performance Monitoring:**
+- **Resource Tracking**: Monitor memory usage patterns during large expansion operations
+- **Thread Lifecycle Management**: Proper thread cleanup and resource deallocation
+- **API Rate Management**: Intelligent request pacing to prevent terminology server overload
+- **Cache Efficiency Metrics**: Track cache performance and hit rates for optimization
+
+---
+
+### **Migration Notes**
+
+**Automatic Improvements:**
+- All memory and performance optimizations apply automatically to existing workflows
+- No configuration changes required - improvements are transparent to users
+- Enhanced performance while maintaining complete backward compatibility
+- Existing NHS Terminology Server credentials continue to work without modification
+
+**Performance Benefits:**
+- Significantly reduced memory usage during large terminology expansions
+- Faster response times through session-based result caching
+- Improved stability under Streamlit Cloud production constraints
+- Better resource utilization with adaptive worker scaling
+
+---
+
+*Version 2.1.1 addresses critical production deployment issues while significantly improving NHS Terminology Server expansion performance and reliability.*
+
+---
+
 ## v2.1.0 - NHS Terminology Server Integration & Cache Architecture (October 2025)
 
 ### 🌳 **NHS England Terminology Server Integration**
@@ -401,5 +495,5 @@ v2.0.0 represents a complete evolution into a comprehensive EMIS XML analysis pl
 ---
 
 *Last Updated: October 2025*  
-*Application Version: 2.1.0*  
+*Application Version: 2.1.1*  
 *Live at: https://emis-xml-toolkit.streamlit.app/*

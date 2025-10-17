@@ -139,6 +139,92 @@ class NHSTerminologyClient:
         except Exception as e:
             return None, f"Connection error: {str(e)}"
     
+    def _expand_concept_uncached(self, snomed_code: str, include_inactive: bool = False) -> ExpansionResult:
+        """Uncached version for worker threads - identical logic to expand_concept"""
+        try:
+            # First, look up the concept to get its display name
+            source_display = snomed_code
+            try:
+                lookup_result = self._lookup_concept_uncached(snomed_code)
+                if lookup_result and 'parameter' in lookup_result:
+                    for param in lookup_result.get('parameter', []):
+                        if param.get('name') == 'display':
+                            source_display = param.get('valueString', snomed_code)
+                            break
+            except Exception:
+                # If lookup fails, continue with the code as display
+                pass
+            
+            # Use the correct FHIR ValueSet $expand operation with ECL
+            # ECL: < means "all descendants of" (children, grandchildren, etc.)
+            ecl_expression = f"< {snomed_code}"
+            
+            # Create an implicit ValueSet using ECL in the URL parameter
+            params = {
+                'url': f'http://snomed.info/sct?fhir_vs=ecl/{quote(ecl_expression)}',
+                '_format': 'json',
+                'count': 1000,  # Limit to prevent timeouts
+                'offset': 0
+            }
+            
+            if not include_inactive:
+                params['activeOnly'] = 'true'
+            
+            # Make the ValueSet $expand request
+            response_data, error_message = self._make_request(
+                "ValueSet/$expand",
+                params=params
+            )
+            
+            if not response_data:
+                return ExpansionResult(
+                    source_code=snomed_code,
+                    source_display="Unknown",
+                    children=[],
+                    total_count=0,
+                    expansion_timestamp=datetime.now(),
+                    error=error_message or "Unknown error"
+                )
+            
+            # Parse expansion results
+            children = []
+            total_count = 0
+            
+            if 'expansion' in response_data:
+                expansion = response_data['expansion']
+                total_count = expansion.get('total', 0)
+                
+                if 'contains' in expansion:
+                    for concept in expansion['contains']:
+                        # All concepts in the expansion are children (ECL < excludes the parent)
+                        children.append(ExpandedConcept(
+                            code=concept.get('code', ''),
+                            display=concept.get('display', ''),
+                            system=concept.get('system', 'http://snomed.info/sct'),
+                            inactive=concept.get('inactive', False),
+                            parent_code=snomed_code
+                        ))
+            
+            return ExpansionResult(
+                source_code=snomed_code,
+                source_display=source_display,
+                children=children,
+                total_count=len(children),
+                expansion_timestamp=datetime.now(),
+                error=None
+            )
+            
+        except Exception as e:
+            return ExpansionResult(
+                source_code=snomed_code,
+                source_display="Unknown",
+                children=[],
+                total_count=0,
+                expansion_timestamp=datetime.now(),
+                error=str(e)
+            )
+
+    # @st.cache_data(ttl=3600, max_entries=2000)  # Disabled - _self conflicts with worker threads
     def expand_concept(self, snomed_code: str, include_inactive: bool = False) -> ExpansionResult:
         """
         Expand a SNOMED concept to get all child concepts using $expand operation
@@ -154,7 +240,7 @@ class NHSTerminologyClient:
             # First, look up the concept to get its display name
             source_display = snomed_code
             try:
-                lookup_result = self.lookup_concept(snomed_code)
+                lookup_result = self._lookup_concept_uncached(snomed_code)
                 if lookup_result and 'parameter' in lookup_result:
                     for param in lookup_result.get('parameter', []):
                         if param.get('name') == 'display':
@@ -233,6 +319,18 @@ class NHSTerminologyClient:
                 error=str(e)
             )
     
+    def _lookup_concept_uncached(self, snomed_code: str) -> Optional[Dict]:
+        """Uncached version for worker threads - identical logic to lookup_concept"""
+        params = {
+            'system': 'http://snomed.info/sct',
+            'code': snomed_code,
+            '_format': 'json'
+        }
+        
+        result, error = self._make_request("CodeSystem/$lookup", params)
+        return result
+
+    # @st.cache_data(ttl=3600, max_entries=1000)  # Temporarily disabled to debug _self issue
     def lookup_concept(self, snomed_code: str) -> Optional[Dict]:
         """
         Look up a single SNOMED concept for details

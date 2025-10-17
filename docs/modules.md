@@ -612,21 +612,28 @@ element = ns.find(parent, 'elementName')  # Handles both <elementName> and <emis
 **When to modify:** Deployment process changes, cache file format updates.
 
 ### `terminology_server/nhs_terminology_client.py` - FHIR R4 API Client
-**Purpose:** Handles NHS England Terminology Server API communication and authentication.
+**Purpose:** Handles NHS England Terminology Server API communication with worker thread compatibility.
 
 **Responsibilities:**
 - OAuth2 system-to-system authentication with token management
-- FHIR R4 API request handling with proper headers
+- FHIR R4 API request handling with proper headers and retry logic
 - Concept lookup and validation operations
-- Child concept expansion using Expression Constraint Language
-- Error handling for network and authentication failures
+- Child concept expansion using Expression Constraint Language (ECL)
+- Worker thread compatibility with uncached method variants
+- Error handling for network, authentication, and threading failures
+
+**Threading Compatibility:**
+- Uncached method variants for worker thread execution (`_expand_concept_uncached`, `_lookup_concept_uncached`)
+- Credential passing for worker thread authentication
+- Thread-safe API request handling with proper session management
+- Eliminated Streamlit caching conflicts that caused worker thread failures
 
 **Key Classes:**
-- `NHSTerminologyClient` - Main API client with authentication
-- `ExpansionResult` - Result container for expansion operations
-- `ExpandedConcept` - Individual concept data structure
+- `NHSTerminologyClient` - Main API client with authentication and threading support
+- `ExpansionResult` - Result container for expansion operations with error tracking
+- `ExpandedConcept` - Individual concept data structure with parent relationships
 
-**When to modify:** API specification changes, authentication updates, new FHIR operations.
+**When to modify:** API specification changes, authentication updates, new FHIR operations, threading optimization.
 
 ### `terminology_server/expansion_service.py` - Service Layer for Code Expansion
 **Purpose:** Business logic layer for SNOMED code expansion operations.
@@ -646,15 +653,28 @@ element = ns.find(parent, 'elementName')  # Handles both <elementName> and <emis
 **When to modify:** Expansion logic changes, EMIS integration updates, result processing requirements.
 
 ### `terminology_server/expansion_ui.py` - User Interface Components
-**Purpose:** Streamlit UI components for terminology server integration.
+**Purpose:** Streamlit UI components for terminology server integration with optimized threading and caching.
 
 **Responsibilities:**
-- Main expansion interface with progress tracking
-- Results display with detailed metrics and comparison
+- Main expansion interface with adaptive worker scaling and progress tracking
+- Session-based result caching to eliminate repeated API calls
+- Threading orchestrator with pure worker thread pattern for Streamlit compatibility
+- Results display with detailed metrics and EMIS vs terminology server comparison
 - Export functionality for multiple formats (CSV, JSON, XML)
 - Individual code lookup for testing and validation
-- Session state management for expansion results
-- Status monitoring and error display
+- Memory-aware processing for Streamlit Cloud deployment constraints
+
+**Threading Performance:**
+- Adaptive worker scaling: 8-20 concurrent workers based on workload size
+- Batched processing to prevent memory overflow in large expansions
+- Worker thread authentication with explicit credential passing
+- Real-time progress tracking with concurrent worker count display
+
+**Caching System:**
+- Session-state expansion result caching with immediate reuse
+- Cache hit/miss statistics display during operations
+- Memory-efficient caching for large terminology hierarchies
+- Persistent results across UI interactions and download operations
 
 **Export Formats:**
 - Summary CSV with expansion results and metrics
@@ -663,7 +683,7 @@ element = ns.find(parent, 'elementName')  # Handles both <elementName> and <emis
 - Hierarchical JSON with parent-child relationships
 - XML output for direct EMIS query implementation
 
-**When to modify:** UI requirements changes, new export formats, display improvements.
+**When to modify:** UI requirements changes, performance optimization, new export formats, threading improvements.
 
 ## Architecture Dependencies
 

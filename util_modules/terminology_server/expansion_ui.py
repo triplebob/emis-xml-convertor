@@ -11,17 +11,75 @@ from typing import List, Dict, Optional, Tuple
 from datetime import datetime
 import io
 import json
+import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
-import warnings
-import logging
+import queue
+import time
+import gc
 
 from .expansion_service import get_expansion_service
 from .nhs_terminology_client import get_terminology_client
 from ..utils.caching.lookup_cache import get_cached_emis_lookup
 
-# Suppress ScriptRunContext warnings from ThreadPoolExecutor
-warnings.filterwarnings("ignore", message=".*missing ScriptRunContext.*")
+
+def _pure_worker_expand_code(code_entry, include_inactive, result_queue, worker_id, client_id, client_secret):
+    """Pure worker function - API calls only, no EMIS processing or caching"""
+    try:
+        snomed_code = code_entry.get('SNOMED Code', '').strip()
+        print(f"DEBUG Worker {worker_id}: Starting with code {snomed_code}")
+        
+        if not snomed_code:
+            print(f"DEBUG Worker {worker_id}: No SNOMED code")
+            result_queue.put({
+                'worker_id': worker_id,
+                'snomed_code': snomed_code,
+                'code_entry': code_entry,
+                'success': False,
+                'error': 'No SNOMED code provided',
+                'raw_result': None
+            })
+            return
+        
+        # Create terminology client with explicit credentials (no Streamlit dependencies)
+        from .nhs_terminology_client import NHSTerminologyClient
+        client = NHSTerminologyClient()
+        # Override credentials directly
+        client.client_id = client_id
+        client.client_secret = client_secret
+        
+        # Perform expansion (pure API call) - no caching, no processing
+        print(f"DEBUG Worker {worker_id}: Calling API...")
+        expansion_result = client._expand_concept_uncached(snomed_code, include_inactive)
+        print(f"DEBUG Worker {worker_id}: API call done, result: {expansion_result is not None}")
+        
+        # Determine success status
+        success = expansion_result is not None and not expansion_result.error
+        error_msg = expansion_result.error if expansion_result else 'No expansion result returned'
+        print(f"DEBUG Worker {worker_id}: Success: {success}, Error: {error_msg[:50] if error_msg else 'None'}")
+        
+        # Put raw result in queue for main thread processing
+        result_queue.put({
+            'worker_id': worker_id,
+            'snomed_code': snomed_code,
+            'code_entry': code_entry,
+            'success': success,
+            'error': error_msg,
+            'raw_result': expansion_result
+        })
+        print(f"DEBUG Worker {worker_id}: Result queued")
+        
+    except Exception as e:
+        print(f"DEBUG Worker {worker_id}: Exception: {str(e)}")
+        # Put error in queue
+        result_queue.put({
+            'worker_id': worker_id,
+            'snomed_code': code_entry.get('SNOMED Code', 'unknown'),
+            'code_entry': code_entry,
+            'success': False,
+            'error': str(e),
+            'raw_result': None
+        })
 
 
 def _clean_dataframe_for_export(df: pd.DataFrame) -> pd.DataFrame:
@@ -437,63 +495,219 @@ def perform_expansion(expandable_codes: List[Dict], include_inactive: bool = Fal
         st.error("⚠️ EMIS lookup cache not found. Please process an XML file first to build the cache, then try expanding codes again.")
         st.stop()  # Stop execution here
     
-    status_text.text("Starting terminology server connections...")
+    # Filter valid codes first
+    valid_codes = [code for code in expandable_codes if code.get('SNOMED Code', '').strip()]
+    total_codes = len(valid_codes)
     
-    expansion_results = {}
+    # Check session state for cached expansion results
+    session_cache_key = f"expansion_cache_{include_inactive}"
+    if session_cache_key not in st.session_state:
+        st.session_state[session_cache_key] = {}
+    
+    cached_results = {}
+    uncached_codes = []
+    
+    # Check which codes are already cached in session state
+    for code_entry in valid_codes:
+        snomed_code = code_entry.get('SNOMED Code', '').strip()
+        if snomed_code in st.session_state[session_cache_key]:
+            cached_results[snomed_code] = st.session_state[session_cache_key][snomed_code]
+        else:
+            uncached_codes.append(code_entry)
+    
+    cache_hits = len(cached_results)
+    cache_misses = len(uncached_codes)
+    
+    status_text.text("Processing cached results...")
+    
+    expansion_results = cached_results.copy()  # Start with cached results
     all_processed_children = []
     total_child_codes = 0
-    successful_expansions = 0
+    successful_expansions = cache_hits  # Count cached results as successful
     completed_count = 0
     first_success_toast_shown = False
     
-    try:
-        # Use ThreadPoolExecutor for concurrent API calls
-        max_workers = min(10, len(expandable_codes))  # Limit concurrent connections
-        
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Submit all expansion tasks with EMIS lookup
-            future_to_code = {
-                executor.submit(_expand_single_code_with_emis_lookup, code_entry, include_inactive, use_cache, service, emis_lookup, code_sources): code_entry
-                for code_entry in expandable_codes
-                if code_entry.get('SNOMED Code', '').strip()
-            }
-            
-            # Process completed futures
-            for future in as_completed(future_to_code):
-                try:
-                    snomed_code, result, processed_children = future.result()
-                    completed_count += 1
-                    
-                    if snomed_code and result:
-                        expansion_results[snomed_code] = result
-                        all_processed_children.extend(processed_children)
+    # Process cached results to generate processed children
+    if cached_results:
+        for snomed_code, cached_result in cached_results.items():
+            if cached_result and not cached_result.error:
+                # Find the original code entry for source information
+                code_entry = next((code for code in valid_codes if code.get('SNOMED Code', '').strip() == snomed_code), None)
+                
+                if code_entry and cached_result.children:
+                    for child in cached_result.children:
+                        child_code = str(child.code).strip()
+                        emis_guid = emis_lookup.get(child_code, 'Not in EMIS lookup table')
                         
-                        if not result.error:
-                            successful_expansions += 1
-                            total_child_codes += len(result.children)
+                        child_data = {
+                            'Parent Code': snomed_code,
+                            'Parent Display': cached_result.source_display,
+                            'Child Code': child.code,
+                            'Child Display': child.display,
+                            'EMIS GUID': emis_guid,
+                            'Inactive': 'True' if child.inactive else 'False',
+                            'Source Type': code_entry.get('Source Type', 'Unknown'),
+                            'Source Name': code_entry.get('Source Name', 'Unknown'),
+                            'Source Container': code_entry.get('Source Container', 'Unknown')
+                        }
+                        all_processed_children.append(child_data)
+                        total_child_codes += 1
+    
+    # Show cache statistics if any cache hits
+    if cache_hits > 0:
+        status_text.text(f"✅ Using {cache_hits} cached results, fetching {cache_misses} new codes...")
+    else:
+        status_text.text("Starting terminology server connections...")
+    
+    try:
+        # Get credentials in main thread (where Streamlit secrets are available)
+        try:
+            client_id = st.secrets["NHSTSERVER_ID"]
+            client_secret = st.secrets["NHSTSERVER_TOKEN"]
+        except KeyError as e:
+            st.error(f"Missing NHS Terminology Server credentials: {e}")
+            return {
+                'success': False,
+                'message': f'Missing credential: {e}',
+                'total_codes': 0,
+                'successful_expansions': 0,
+                'children': [],
+                'results': {}
+            }
+        
+        # If no codes need fetching, skip worker setup
+        if not uncached_codes:
+            # All results were cached!
+            threads = []
+            max_workers = 0
+        else:
+            # Adaptive worker scaling based on uncached workload size
+            uncached_count = len(uncached_codes)
+            if uncached_count <= 100:
+                max_workers = 8   # Small workloads: conservative threading
+            elif uncached_count <= 300:
+                max_workers = 12  # Medium workloads: moderate threading  
+            elif uncached_count <= 500:
+                max_workers = 16  # Large workloads: high threading
+            else:
+                max_workers = 20  # Very large workloads: maximum threading
+            
+            max_workers = min(max_workers, uncached_count)  # Don't exceed available codes
+            result_queue = queue.Queue()
+        
+            # Simple threading approach that works within memory limits
+            threads = []
+            for i, code_entry in enumerate(uncached_codes[:max_workers]):  # Start first batch
+                thread = threading.Thread(
+                    target=_pure_worker_expand_code,
+                    args=(code_entry, include_inactive, result_queue, i, client_id, client_secret),
+                    daemon=True
+                )
+                thread.start()
+                threads.append(thread)
+            
+            # Keep track of remaining codes to process
+            remaining_codes = uncached_codes[max_workers:]
+            next_thread_id = max_workers
+        
+        # Orchestrator loop: collect results and update UI in main thread
+        timeout_counter = 0
+        max_timeouts = 100  # Allow 10 seconds of timeouts before giving up
+        uncached_target = len(uncached_codes)  # Only need to wait for uncached results
+        
+        while completed_count < uncached_target:
+            try:
+                # Non-blocking check for results with longer timeout
+                result = result_queue.get(timeout=1.0)  # Increased to 1 second
+                completed_count += 1
+                timeout_counter = 0  # Reset timeout counter on successful result
+                print(f"DEBUG: Got result {completed_count}/{total_codes}, success: {result.get('success')}, error: {result.get('error', 'None')[:50] if result.get('error') else 'None'}")
+                
+                # Process raw result in main thread (Streamlit calls are safe here)
+                if result['success'] and result['raw_result']:
+                    raw_expansion = result['raw_result']
+                    code_entry = result['code_entry']
+                    snomed_code = result['snomed_code']
+                    
+                    # Process children with EMIS lookup in main thread
+                    processed_children = []
+                    if raw_expansion and not raw_expansion.error:
+                        for child in raw_expansion.children:
+                            # Look up EMIS GUID for child code
+                            child_code = str(child.code).strip()
+                            emis_guid = emis_lookup.get(child_code, 'Not in EMIS lookup table')
                             
-                            # Show toast for first successful connection during expansion
-                            if not first_success_toast_shown:
-                                st.toast("🔗 Connected to NHS Terminology Server for expansion!", icon="✅")
-                                first_success_toast_shown = True
-                                
-                                # Update connection status in session state
-                                st.session_state.nhs_connection_status = {
-                                    'tested': True,
-                                    'success': True,
-                                    'message': 'Connected to NHS England Terminology Server',
-                                    'timestamp': datetime.now().isoformat()
-                                }
+                            child_data = {
+                                'Parent Code': snomed_code,
+                                'Parent Display': raw_expansion.source_display,
+                                'Child Code': child.code,
+                                'Child Display': child.display,
+                                'EMIS GUID': emis_guid,
+                                'Inactive': 'True' if child.inactive else 'False',
+                                'Source Type': code_entry.get('Source Type', 'Unknown'),
+                                'Source Name': code_entry.get('Source Name', 'Unknown'),
+                                'Source Container': code_entry.get('Source Container', 'Unknown')
+                            }
+                            processed_children.append(child_data)
                     
-                    # Update progress
-                    progress = completed_count / len(future_to_code)
-                    progress_bar.progress(progress)
-                    status_text.text(f"Completed {completed_count}/{len(future_to_code)} expansions...")
+                    # Store results
+                    expansion_results[snomed_code] = raw_expansion
+                    all_processed_children.extend(processed_children)
+                    successful_expansions += 1
+                    total_child_codes += len(processed_children)
                     
-                except Exception as e:
-                    completed_count += 1
-                    # Continue processing other codes if one fails
-                    continue
+                    # Cache the result in session state for immediate reuse
+                    st.session_state[session_cache_key][snomed_code] = raw_expansion
+                    
+                    # Show toast for first successful connection during expansion
+                    if not first_success_toast_shown:
+                        st.toast("🔗 Connected to NHS Terminology Server for expansion!", icon="✅")
+                        first_success_toast_shown = True
+                        
+                        # Update connection status in session state
+                        st.session_state.nhs_connection_status = {
+                            'tested': True,
+                            'success': True,
+                            'message': 'Connected to NHS England Terminology Server',
+                            'timestamp': datetime.now().isoformat()
+                        }
+                
+                # Start next thread if there are remaining codes
+                if remaining_codes:
+                    next_code = remaining_codes.pop(0)
+                    thread = threading.Thread(
+                        target=_pure_worker_expand_code,
+                        args=(next_code, include_inactive, result_queue, next_thread_id, client_id, client_secret),
+                        daemon=True
+                    )
+                    thread.start()
+                    threads.append(thread)
+                    next_thread_id += 1
+                
+                # Update progress (safe in main thread)
+                progress = completed_count / total_codes
+                progress_bar.progress(progress)
+                status_text.text(f"Completed {completed_count}/{total_codes} expansions... (using {max_workers} concurrent workers)")
+                
+                # Periodic garbage collection to manage memory
+                if completed_count % 50 == 0:
+                    gc.collect()
+                
+            except queue.Empty:
+                # No results yet, continue polling
+                timeout_counter += 1
+                if timeout_counter >= max_timeouts:
+                    print(f"DEBUG: Timeout waiting for results after {timeout_counter} attempts, breaking")
+                    break
+                time.sleep(0.01)  # Small sleep to prevent busy waiting
+                continue
+            except Exception as e:
+                completed_count += 1
+                continue
+        
+        # Ensure all threads complete
+        for thread in threads:
+            thread.join(timeout=1)  # Don't wait forever
         
         # Show results summary with dynamic status indicators
         progress_bar.empty()
@@ -746,6 +960,9 @@ def render_expansion_results(expansion_data: Dict):
             key="summary_download"
         )
         
+        # Clear memory after export
+        del summary_csv
+        
         # Export filter options (for child codes)
         st.markdown("**🔍 Child Codes Filter**")
         if has_source_tracking:
@@ -836,6 +1053,13 @@ def render_expansion_results(expansion_data: Dict):
                     help="Child codes with SNOMED details only",
                     key="snomed_download"
                 )
+                
+                # Clear memory after large export
+                is_large_export = len(snomed_export_df) > 10000
+                del snomed_csv, snomed_export_df
+                if is_large_export:
+                    st.cache_data.clear()
+                    gc.collect()
             else:
                 st.info(f"No SNOMED data available for {export_filter}")
             

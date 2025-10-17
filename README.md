@@ -23,7 +23,9 @@ Transform complex EMIS XML documents into actionable insights for healthcare tea
 
 ### 🌳 **NHS England Terminology Server Integration**
 - **FHIR R4 API Integration**: Direct connection to NHS England Terminology Server
-- **Hierarchical Code Expansion**: Automatic expansion of codes with `includechildren=true` flags
+- **Hierarchical Code Expansion**: Automatic expansion of codes with `includechildren=true` flags  
+- **Adaptive Threading**: Scales 8-20 concurrent workers based on workload size for optimal performance
+- **Session-based Caching**: Eliminates repeated API calls with intelligent result caching
 - **EMIS Comparison Analysis**: Compare EMIS expected vs actual child counts from terminology server
 - **Multiple Export Formats**: CSV, hierarchical JSON, and XML-ready outputs
 - **Real-time Validation**: Individual code lookup and testing capabilities
@@ -252,6 +254,8 @@ emis-xml-convertor/
 - **FHIR R4 Compliance**: Full NHS England Terminology Server API support
 - **OAuth2 Authentication**: System-to-system authentication with automatic token refresh
 - **ECL Support**: Expression Constraint Language for hierarchical expansion
+- **Adaptive Threading**: Dynamic worker scaling (8-20 workers) optimized for Streamlit Cloud 2.7GB limits
+- **Session Caching**: Intelligent result caching eliminates repeated API calls for instant reuse
 - **Rate Limiting**: Graceful handling of API constraints and timeouts
 - **Error Recovery**: Comprehensive error handling with fallback strategies
 
@@ -357,5 +361,5 @@ This toolkit is provided without warranty of any kind. Healthcare professionals 
 ---
 
 *Last Updated: October 2025*  
-*Application Version: 2.1.0*  
+*Application Version: 2.1.1*  
 *Live Application: https://emis-xml-toolkit.streamlit.app/*
