@@ -10,6 +10,16 @@ import re
 from datetime import datetime
 from .search_rule_analyzer import SearchRuleAnalysis
 from .common_structures import CriteriaGroup
+from .linked_criteria_handler import filter_top_level_criteria, has_linked_criteria
+from ..xml_parsers.criterion_parser import SearchCriterion, check_criterion_parameters
+from ..core import FolderManager, SearchManager
+from ..utils.text_utils import pluralize_unit, format_operator_text
+from .linked_criteria_handler import (
+    render_linked_criteria, 
+    filter_linked_value_sets_from_main,
+    filter_linked_column_filters_from_main
+)
+from .shared_render_utils import _render_rule_step, _render_rule_step_content, _is_parent_report, _render_report_type_specific_info
 
 
 def _natural_sort_key(text):
@@ -61,19 +71,7 @@ def _lookup_snomed_for_ui(emis_guid: str) -> str:
             return 'Not found'
     except Exception:
         return 'Lookup error'
-from ..xml_parsers.criterion_parser import SearchCriterion
-from .linked_criteria_handler import (
-    render_linked_criteria, 
-    filter_linked_value_sets_from_main,
-    filter_linked_column_filters_from_main,
-    filter_top_level_criteria,
-    has_linked_criteria
-)
-# Import moved to function level to avoid circular imports
-from ..core import FolderManager, SearchManager
-from ..utils.text_utils import pluralize_unit, format_operator_text
-from ..xml_parsers.criterion_parser import check_criterion_parameters
-from .shared_render_utils import _render_rule_step, _render_rule_step_content, _is_parent_report, _render_report_type_specific_info
+# Imports moved to top of file
 
 # render_search_rule_tab function moved to ui_tabs.py as render_xml_structure_tabs
 # This module now only contains the individual rendering functions
@@ -225,64 +223,76 @@ def _render_single_detailed_rule(selected_search, reports):
         st.markdown(f"### {classification} {clean_name}")
     
     with col2:
-        # Excel Export - dynamic import to avoid circular dependency
-        analysis = st.session_state.get('search_analysis')
-        if analysis:
-            try:
-                # Dynamic import to avoid circular dependency
-                import importlib
-                export_module = importlib.import_module('util_modules.export_handlers.search_export')
-                SearchExportHandler = export_module.SearchExportHandler
-                
-                export_handler = SearchExportHandler(analysis)
-                
-                # Determine if this is a child search
-                include_parent_info = selected_search.parent_guid is not None
-                
-                filename, content = export_handler.generate_search_export(
-                    selected_search, 
-                    include_parent_info=include_parent_info
-                )
-                
-                st.download_button(
-                    label="📥 Excel",
-                    data=content,
-                    file_name=filename,
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    help=f"Export search logic to Excel: {clean_name}",
-                    key=f"export_excel_{selected_search.id}"
-                )
-            except Exception as e:
-                st.error(f"Excel export not available: {str(e)}")
-        else:
-            st.error("Analysis data not available for Excel export")
+        # Excel Export - LAZY generation only when clicked
+        if st.button("📥 Excel", help=f"Generate Excel export for: {clean_name}", key=f"excel_btn_{selected_search.id}"):
+            analysis = st.session_state.get('search_analysis')
+            if analysis:
+                try:
+                    with st.spinner("Generating Excel export..."):
+                        # Dynamic import to avoid circular dependency
+                        import importlib
+                        export_module = importlib.import_module('util_modules.export_handlers.search_export')
+                        SearchExportHandler = export_module.SearchExportHandler
+                        
+                        export_handler = SearchExportHandler(analysis)
+                        
+                        # Determine if this is a child search
+                        include_parent_info = selected_search.parent_guid is not None
+                        
+                        filename, content = export_handler.generate_search_export(
+                            selected_search, 
+                            include_parent_info=include_parent_info
+                        )
+                        
+                        st.download_button(
+                            label="⬇️ Download Excel",
+                            data=content,
+                            file_name=filename,
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            key=f"export_excel_dl_{selected_search.id}"
+                        )
+                        # Clear large content from memory immediately after download
+                        del content
+                        import gc
+                        gc.collect()
+                        st.success("✅ Excel export generated successfully")
+                except Exception as e:
+                    st.error(f"Excel export failed: {str(e)}")
+            else:
+                st.error("Analysis data not available for Excel export")
     
     with col3:
-        # JSON Export - avoid circular import by doing dynamic import
-        analysis = st.session_state.get('search_analysis')
-        xml_filename = st.session_state.get('xml_filename', 'unknown.xml')
-        if analysis:
-            try:
-                # Dynamic import to avoid circular dependency
-                import importlib
-                json_module = importlib.import_module('util_modules.export_handlers.json_export_generator')
-                JSONExportGenerator = json_module.JSONExportGenerator
-                
-                json_generator = JSONExportGenerator(analysis)
-                json_filename, json_content = json_generator.generate_search_json(selected_search, xml_filename)
-                
-                st.download_button(
-                    label="📥 JSON",
-                    data=json_content,
-                    file_name=json_filename,
-                    mime="application/json",
-                    help=f"Export search logic as JSON: {clean_name}",
-                    key=f"export_json_{selected_search.id}"
-                )
-            except Exception as e:
-                st.error(f"JSON export not available: {str(e)}")
-        else:
-            st.error("Analysis data not available for JSON export")
+        # JSON Export - LAZY generation only when clicked
+        if st.button("📥 JSON", help=f"Generate JSON export for: {clean_name}", key=f"json_btn_{selected_search.id}"):
+            analysis = st.session_state.get('search_analysis')
+            xml_filename = st.session_state.get('xml_filename', 'unknown.xml')
+            if analysis:
+                try:
+                    with st.spinner("Generating JSON export..."):
+                        # Dynamic import to avoid circular dependency
+                        import importlib
+                        json_module = importlib.import_module('util_modules.export_handlers.json_export_generator')
+                        JSONExportGenerator = json_module.JSONExportGenerator
+                        
+                        json_generator = JSONExportGenerator(analysis)
+                        json_filename, json_content = json_generator.generate_search_json(selected_search, xml_filename)
+                        
+                        st.download_button(
+                            label="⬇️ Download JSON",
+                            data=json_content,
+                            file_name=json_filename,
+                            mime="application/json",
+                            key=f"export_json_dl_{selected_search.id}"
+                        )
+                        # Clear large content from memory immediately after download
+                        del json_content
+                        import gc
+                        gc.collect()
+                        st.success("✅ JSON export generated successfully")
+                except Exception as e:
+                    st.error(f"JSON export failed: {str(e)}")
+            else:
+                st.error("Analysis data not available for JSON export")
     
     if selected_search.description:
         st.markdown("### 📋 Search Description")
@@ -438,421 +448,440 @@ def render_individual_search_details(selected_search, reports, show_dependencies
 
 def render_criteria_group(group: CriteriaGroup, rule_name: str):
     """Render individual rule with its criteria"""
-    with st.container():
+    try:
         # Filter out linked criteria that should only appear within their parent criteria
         # This prevents linked criteria from being displayed as separate "Criterion 2" etc.
         displayed_criteria = filter_top_level_criteria(group)
-        
-        # Build rule header with optional help icon for single-criterion AND logic
-        rule_header = f"**{rule_name}** - Logic: `{group.member_operator}`"
-        
-        st.markdown(rule_header)
-        
-        # Action indicators with clinical terminology
-        col1, col2 = st.columns(2)
-        with col1:
-            if group.action_if_true == "SELECT":
-                action_color = "🟢"
-                action_text = "Include in final result"
-            elif group.action_if_true == "NEXT":
-                action_color = "🔀"  # Flow control
-                action_text = "Goto next rule"
-            elif group.action_if_true == "REJECT":
-                action_color = "🔴"  # Exclusion
-                action_text = "Exclude from final result"
-            else:
-                action_color = "⚪"  # Unknown
-                action_text = group.action_if_true
-            st.markdown(f"{action_color} If rule passed: **{action_text}**")
+    except Exception as e:
+        st.error(f"Error filtering criteria for rule '{rule_name}': {str(e)}")
+        displayed_criteria = group.criteria if hasattr(group, 'criteria') else []
+    
+    # Build rule header with optional help icon for single-criterion AND logic
+    rule_header = f"**{rule_name}** - Logic: `{group.member_operator}`"
+    
+    st.markdown(rule_header)
+    
+    # Action indicators with clinical terminology
+    col1, col2 = st.columns(2)
+    with col1:
+        if group.action_if_true == "SELECT":
+            action_color = "🟢"
+            action_text = "Include in final result"
+        elif group.action_if_true == "NEXT":
+            action_color = "🔀"  # Flow control
+            action_text = "Goto next rule"
+        elif group.action_if_true == "REJECT":
+            action_color = "🔴"  # Exclusion
+            action_text = "Exclude from final result"
+        else:
+            action_color = "⚪"  # Unknown
+            action_text = group.action_if_true
+        st.markdown(f"{action_color} If rule passed: **{action_text}**")
             
-        with col2:
-            if group.action_if_false == "SELECT":
-                action_color = "🟢"
-                action_text = "Include in final result"
-            elif group.action_if_false == "NEXT":
-                action_color = "🔀"  # Flow control
-                action_text = "Goto next rule"
-            elif group.action_if_false == "REJECT":
-                action_color = "🔴"  # Exclusion
-                action_text = "Exclude from final result"
-            else:
-                action_color = "⚪"  # Unknown
-                action_text = group.action_if_false
-            st.markdown(f"{action_color} If rule failed: **{action_text}**")
-        
-        # Show when this rule uses results from another search
-        if group.population_criteria:
-            st.markdown("**🔗 Using Another Search** - This rule uses the results from search below instead of hard coded criteria:")
-            for pop_crit in group.population_criteria:
-                # Try to find the referenced search
-                analysis = st.session_state.get('search_analysis')
-                if analysis:
-                    ref_report = next((r for r in analysis.reports if r.id == pop_crit.report_guid), None)
+    with col2:
+        if group.action_if_false == "SELECT":
+            action_color = "🟢"
+            action_text = "Include in final result"
+        elif group.action_if_false == "NEXT":
+            action_color = "🔀"  # Flow control
+            action_text = "Goto next rule"
+        elif group.action_if_false == "REJECT":
+            action_color = "🔴"  # Exclusion
+            action_text = "Exclude from final result"
+        else:
+            action_color = "⚪"  # Unknown
+            action_text = group.action_if_false
+        st.markdown(f"{action_color} If rule failed: **{action_text}**")
+    
+    # Show when this rule uses results from another search
+    if group.population_criteria:
+        st.markdown("**🔗 Using Another Search** - This rule uses the results from search below instead of hard coded criteria:")
+        for pop_crit in group.population_criteria:
+            # Try to find the referenced search
+            analysis = st.session_state.get('search_analysis')
+            if analysis:
+                ref_report = next((r for r in analysis.reports if r.id == pop_crit.report_guid), None)
+                if ref_report:
+                    from ..core import SearchManager
+                    ref_clean_name = SearchManager.clean_search_name(ref_report.name)
+                    st.info(f"🔍 **{ref_clean_name}**")
+                else:
+                    # Try to find in all reports (including member searches)
+                    all_reports = []
+                    def collect_all_reports(reports):
+                        for report in reports:
+                            all_reports.append(report)
+                            if hasattr(report, 'member_searches') and report.member_searches:
+                                collect_all_reports(report.member_searches)
+                    
+                    collect_all_reports(analysis.reports)
+                    ref_report = next((r for r in all_reports if r.id == pop_crit.report_guid), None)
+                    
                     if ref_report:
                         from ..core import SearchManager
                         ref_clean_name = SearchManager.clean_search_name(ref_report.name)
                         st.info(f"🔍 **{ref_clean_name}**")
                     else:
-                        # Try to find in all reports (including member searches)
-                        all_reports = []
-                        def collect_all_reports(reports):
-                            for report in reports:
-                                all_reports.append(report)
-                                if hasattr(report, 'member_searches') and report.member_searches:
-                                    collect_all_reports(report.member_searches)
-                        
-                        collect_all_reports(analysis.reports)
-                        ref_report = next((r for r in all_reports if r.id == pop_crit.report_guid), None)
-                        
-                        if ref_report:
-                            from ..core import SearchManager
-                            ref_clean_name = SearchManager.clean_search_name(ref_report.name)
-                            st.info(f"🔍 **{ref_clean_name}**")
-                        else:
-                            st.caption(f"• Search ID: {pop_crit.report_guid[:8]}...")
-                else:
-                    st.caption(f"• Search ID: {pop_crit.report_guid[:8]}...")
-        
-        # Display the pre-calculated non-duplicate criteria
-        if not displayed_criteria:
-            # Check if we have original criteria but they were all filtered out as duplicates
-            if len(group.criteria) > 0:
-                # All criteria were filtered as linked duplicates - this rule's criteria are shown elsewhere
-                if st.session_state.get('debug_mode', False):
-                    st.warning(f"⚠️ **Debug:** Rule has {len(group.criteria)} criteria but all filtered as linked duplicates")
-                    for i, crit in enumerate(group.criteria):
-                        st.caption(f"Debug: Criterion {i+1}: {crit.display_name} (Table: {crit.table}) - filtered as duplicate")
-                else:
-                    st.info("ℹ️ **This rule's criteria are displayed under linked criteria in other rules.** The criteria for this rule are shown as part of complex linked relationships in previous rules.")
-            elif group.population_criteria:
-                # This case is already handled above with the "Using Another Search" section
-                pass
+                        st.caption(f"• Search ID: {pop_crit.report_guid[:8]}...")
             else:
-                # This should not happen with proper filtering - all searches in EMIS must have criteria
-                if st.session_state.get('debug_mode', False):
-                    st.error(f"⚠️ **Debug:** Unexpected empty rule found after filtering. This suggests a filtering issue.")
-                    st.write(f"Debug: Original criteria count: {len(group.criteria)}")
-                    st.write(f"Debug: Displayed criteria count: {len(displayed_criteria)}")
-                    st.write(f"Debug: Population criteria: {group.population_criteria}")
-                    for i, crit in enumerate(group.criteria):
-                        st.write(f"Debug: Criterion {i+1}: {crit.display_name}, Table: {crit.table}, ValueSets: {len(crit.value_sets) if hasattr(crit, 'value_sets') else 'N/A'}")
-                else:
-                    st.warning("⚠️ **Unexpected empty rule.** This should not occur with proper search filtering.")
+                st.caption(f"• Search ID: {pop_crit.report_guid[:8]}...")
+    
+    # Display the pre-calculated non-duplicate criteria
+    if not displayed_criteria:
+        # Check if we have original criteria but they were all filtered out as duplicates
+        if len(group.criteria) > 0:
+            # All criteria were filtered as linked duplicates - this rule's criteria are shown elsewhere
+            if st.session_state.get('debug_mode', False):
+                st.warning(f"⚠️ **Debug:** Rule has {len(group.criteria)} criteria but all filtered as linked duplicates")
+                for i, crit in enumerate(group.criteria):
+                    st.caption(f"Debug: Criterion {i+1}: {crit.display_name} (Table: {crit.table}) - filtered as duplicate")
+            else:
+                st.info("ℹ️ **This rule's criteria are displayed under linked criteria in other rules.** The criteria for this rule are shown as part of complex linked relationships in previous rules.")
+        elif group.population_criteria:
+            # This case is already handled above with the "Using Another Search" section
+            pass
         else:
-            for k, criterion in enumerate(displayed_criteria):
+            # This should not happen with proper filtering - all searches in EMIS must have criteria
+            if st.session_state.get('debug_mode', False):
+                st.error(f"⚠️ **Debug:** Unexpected empty rule found after filtering. This suggests a filtering issue.")
+                st.write(f"Debug: Original criteria count: {len(group.criteria)}")
+                st.write(f"Debug: Displayed criteria count: {len(displayed_criteria)}")
+                st.write(f"Debug: Population criteria: {group.population_criteria}")
+                for i, crit in enumerate(group.criteria):
+                    st.write(f"Debug: Criterion {i+1}: {crit.display_name}, Table: {crit.table}, ValueSets: {len(crit.value_sets) if hasattr(crit, 'value_sets') else 'N/A'}")
+            else:
+                st.warning("⚠️ **Unexpected empty rule.** This should not occur with proper search filtering.")
+    else:
+        for k, criterion in enumerate(displayed_criteria):
+            try:
                 render_search_criterion(criterion, f"Criterion {k+1}")
+            except Exception as e:
+                st.error(f"Error rendering criterion {k+1}: {str(e)}")
+                st.write(f"Criterion details: {getattr(criterion, 'display_name', 'No display name')}")
         
-        st.markdown("---")
+    st.markdown("---")
 
 
 def render_search_criterion(criterion: SearchCriterion, criterion_name: str):
     """Render individual search criterion with all its details"""
-    with st.expander(f"{criterion_name}: {criterion.display_name}", expanded=False):
+    try:
+        with st.expander(f"{criterion_name}: {criterion.display_name}", expanded=False):
+            
+            # Basic info
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown(f"**Table:** `{criterion.table}`")
+                # Note: We should show the search/report description, not the criterion description
+                # The criterion description is often inaccurate/misleading
+            with col2:
+                negation_text = "🚫 Not" if criterion.negation else "✅ Include"
+                st.markdown(f"**Action:** {negation_text}")
+                if criterion.exception_code:
+                    st.markdown(f"**EMIS Internal Flag:** `{criterion.exception_code}`")
         
-        # Basic info
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown(f"**Table:** `{criterion.table}`")
-            # Note: We should show the search/report description, not the criterion description
-            # The criterion description is often inaccurate/misleading
-        with col2:
-            negation_text = "🚫 Not" if criterion.negation else "✅ Include"
-            st.markdown(f"**Action:** {negation_text}")
-            if criterion.exception_code:
-                st.markdown(f"**EMIS Internal Flag:** `{criterion.exception_code}`")
+            # Check for parameters and show warning
+            parameter_info = check_criterion_parameters(criterion)
+            if parameter_info['has_parameters']:
+                param_type = "Global" if parameter_info['has_global'] else "Local"
+                param_names = "', '".join(parameter_info['parameter_names'])
+                if parameter_info['has_global'] and not parameter_info['has_local']:
+                    warning_text = f"⚠️ **Parameter Warning:** This search uses Global parameter(s): '{param_names}'"
+                elif parameter_info['has_local'] and not parameter_info['has_global']:
+                    warning_text = f"⚠️ **Parameter Warning:** This search uses Local parameter(s): '{param_names}'"
+                else:
+                    warning_text = f"⚠️ **Parameter Warning:** This search uses parameter(s): '{param_names}'"
+                st.warning(warning_text)
         
-        # Check for parameters and show warning
-        parameter_info = check_criterion_parameters(criterion)
-        if parameter_info['has_parameters']:
-            param_type = "Global" if parameter_info['has_global'] else "Local"
-            param_names = "', '".join(parameter_info['parameter_names'])
-            if parameter_info['has_global'] and not parameter_info['has_local']:
-                warning_text = f"⚠️ **Parameter Warning:** This search uses Global parameter(s): '{param_names}'"
-            elif parameter_info['has_local'] and not parameter_info['has_global']:
-                warning_text = f"⚠️ **Parameter Warning:** This search uses Local parameter(s): '{param_names}'"
-            else:
-                warning_text = f"⚠️ **Parameter Warning:** This search uses parameter(s): '{param_names}'"
-            st.warning(warning_text)
-        
-        # Value sets (codes being searched for) - exclude linked criteria value sets
-        main_value_sets = filter_linked_value_sets_from_main(criterion)
-        
-        # Separate EMISINTERNAL codes from clinical codes
-        clinical_value_sets = []
-        emisinternal_value_sets = []
-        
-        for vs in main_value_sets:
-            if vs.get('code_system') == 'EMISINTERNAL':
-                emisinternal_value_sets.append(vs)
-            else:
-                clinical_value_sets.append(vs)
-        
-        # Display clinical codes only (no EMISINTERNAL)
-        if clinical_value_sets:
-            st.markdown("**🔍 Clinical Codes:**")
-            for i, vs in enumerate(clinical_value_sets):
-                # Create a title for the expandable section
-                vs_title = vs['description'] if vs['description'] else f"Value Set {i+1}"
-                vs_count = len(vs['values'])
-                
-                # Check if this is a library item
-                is_library_item = vs.get('code_system') == 'LIBRARY_ITEM'
-                icon = "📚" if is_library_item else "📋"
-                
-                with st.expander(f"{icon} {vs_title} ({vs_count} codes)", expanded=False):
-                    # Enhanced code system descriptions
-                    code_system = vs['code_system']
-                    system_display = code_system
-                    if 'SNOMED_CONCEPT' in code_system:
-                        system_display = "SNOMED Clinical Terminology"
-                    elif 'SCT_DRGGRP' in code_system:
-                        system_display = "Drug Group Classification"
-                    elif 'EMISINTERNAL' in code_system:
-                        system_display = "EMIS Internal Classifications"
-                    elif 'SCT_APPNAME' in code_system:
-                        system_display = "Medical Appliance Names"
-                    elif code_system == 'LIBRARY_ITEM':
-                        system_display = "EMIS Internal Library"
+            # Value sets (codes being searched for) - exclude linked criteria value sets
+            main_value_sets = filter_linked_value_sets_from_main(criterion)
+            
+            # Separate EMISINTERNAL codes from clinical codes
+            clinical_value_sets = []
+            emisinternal_value_sets = []
+            
+            for vs in main_value_sets:
+                if vs.get('code_system') == 'EMISINTERNAL':
+                    emisinternal_value_sets.append(vs)
+                else:
+                    clinical_value_sets.append(vs)
+            
+            # Display clinical codes only (no EMISINTERNAL)
+            if clinical_value_sets:
+                st.markdown("**🔍 Clinical Codes:**")
+                for i, vs in enumerate(clinical_value_sets):
+                    # Create a title for the expandable section
+                    vs_title = vs['description'] if vs['description'] else f"Value Set {i+1}"
+                    vs_count = len(vs['values'])
                     
-                    st.caption(f"**System:** {system_display}")
-                    if vs['id']:
-                        st.caption(f"**ID:** {vs['id']}")
+                    # Check if this is a library item
+                    is_library_item = vs.get('code_system') == 'LIBRARY_ITEM'
+                    icon = "📚" if is_library_item else "📋"
                     
-                    # Display codes as scrollable dataframe with icons
-                    import pandas as pd
-                    code_data = []
-                    
-                    # PERFORMANCE OPTIMIZATION: Batch SNOMED lookups instead of individual lookups
-                    # Get lookup table from session state
-                    lookup_df = st.session_state.get('lookup_df')
-                    emis_guid_col = st.session_state.get('emis_guid_col')
-                    snomed_code_col = st.session_state.get('snomed_code_col')
-                    
-                    # Create lookup dictionary for batch processing
-                    snomed_lookup = {}
-                    if lookup_df is not None and emis_guid_col is not None and snomed_code_col is not None:
-                        try:
-                            # Extract all non-library EMIS GUIDs from the value set
-                            emis_guids = [value['value'] for value in vs['values'] if value['value'] and not value.get('is_library_item', False)]
-                            
-                            if emis_guids:
-                                # Single DataFrame operation to lookup all codes at once
-                                matching_rows = lookup_df[lookup_df[emis_guid_col].astype(str).str.strip().isin([str(guid).strip() for guid in emis_guids])]
-                                snomed_lookup = dict(zip(matching_rows[emis_guid_col].astype(str).str.strip(), matching_rows[snomed_code_col]))
-                        except Exception:
-                            # Fallback to individual lookups if batch fails
-                            pass
-                    
-                    for j, value in enumerate(vs['values']):
-                        code_value = value['value'] if value['value'] else "No code specified"
-                        code_name = value.get('display_name', '')
+                    with st.expander(f"{icon} {vs_title} ({vs_count} codes)", expanded=False):
+                        # Enhanced code system descriptions
+                        code_system = vs['code_system']
+                        system_display = code_system
+                        if 'SNOMED_CONCEPT' in code_system:
+                            system_display = "SNOMED Clinical Terminology"
+                        elif 'SCT_DRGGRP' in code_system:
+                            system_display = "Drug Group Classification"
+                        elif 'EMISINTERNAL' in code_system:
+                            system_display = "EMIS Internal Classifications"
+                        elif 'SCT_APPNAME' in code_system:
+                            system_display = "Medical Appliance Names"
+                        elif code_system == 'LIBRARY_ITEM':
+                            system_display = "EMIS Internal Library"
                         
-                        # Special handling for library items
-                        if value.get('is_library_item', False):
-                            code_data.append({
-                                'EMIS Code': code_value,
-                                'SNOMED Code': 'Library Item',
-                                'Description': value['display_name'],
-                                'Scope': '📚 Library',
-                                'Is Refset': 'No'
-                            })
-                        else:
-                            # Handle refsets differently - they have direct SNOMED codes
-                            if value['is_refset']:
-                                # For refsets: EMIS Code = SNOMED Code, Description from XML
-                                snomed_code = code_value  # Refset codes are direct SNOMED codes
-                                scope = '🎯 Refset'
-                                # Use the valueset description as the code description for refsets
-                                description = vs.get('description', code_name) if vs.get('description') != code_name else code_name
-                            else:
-                                # Use batch lookup result or fallback for regular codes
-                                snomed_code = snomed_lookup.get(str(code_value).strip(), 'Not found' if code_value != "No code specified" else 'N/A')
-                                description = code_name
+                        st.caption(f"**System:** {system_display}")
+                        if vs['id']:
+                            st.caption(f"**ID:** {vs['id']}")
+                        
+                        # Display codes as scrollable dataframe with icons
+                        import pandas as pd
+                        code_data = []
+                        
+                        # PERFORMANCE OPTIMIZATION: Batch SNOMED lookups instead of individual lookups
+                        # Get lookup table from session state
+                        lookup_df = st.session_state.get('lookup_df')
+                        emis_guid_col = st.session_state.get('emis_guid_col')
+                        snomed_code_col = st.session_state.get('snomed_code_col')
+                        
+                        # Create lookup dictionary for batch processing
+                        snomed_lookup = {}
+                        if lookup_df is not None and emis_guid_col is not None and snomed_code_col is not None:
+                            try:
+                                # Extract all non-library EMIS GUIDs from the value set
+                                emis_guids = [value['value'] for value in vs['values'] if value['value'] and not value.get('is_library_item', False)]
                                 
-                                if value['include_children']:
-                                    scope = '👥 + Children'
-                                else:
-                                    scope = '🎯 Exact'
-                            
-                            code_data.append({
-                                'EMIS Code': code_value,
-                                'SNOMED Code': snomed_code,
-                                'Description': description,
-                                'Scope': scope,
-                                'Is Refset': 'Yes' if value['is_refset'] else 'No'
-                            })
-                    
-                    if code_data:
-                        # Create and display dataframe
-                        codes_df = pd.DataFrame(code_data)
+                                if emis_guids:
+                                    # Single DataFrame operation to lookup all codes at once
+                                    matching_rows = lookup_df[lookup_df[emis_guid_col].astype(str).str.strip().isin([str(guid).strip() for guid in emis_guids])]
+                                    snomed_lookup = dict(zip(matching_rows[emis_guid_col].astype(str).str.strip(), matching_rows[snomed_code_col]))
+                            except Exception:
+                                # Fallback to individual lookups if batch fails
+                                pass
                         
-                        st.dataframe(
-                            codes_df,
-                            width='stretch',
-                            hide_index=True,
-                            column_config={
-                                "EMIS Code": st.column_config.TextColumn(
-                                    "🔍 EMIS Code",
-                                    width="medium"
-                                ),
-                                "SNOMED Code": st.column_config.TextColumn(
-                                    "🩺 SNOMED Code", 
-                                    width="medium"
-                                ),
-                                "Description": st.column_config.TextColumn(
-                                    "📝 Description",
-                                    width="large"
-                                ),
-                                "Scope": st.column_config.TextColumn(
-                                    "🔗 Scope",
-                                    width="small"
-                                ),
-                                "Is Refset": st.column_config.TextColumn(
-                                    "🎯 Refset",
-                                    width="small"
-                                )
-                            }
-                        )
-        
-        # Column filters (age, date restrictions, etc.) with smart deduplication
-        # Filter out column filters that are used in linked criteria
-        main_column_filters = filter_linked_column_filters_from_main(criterion)
-        
-        if main_column_filters:
-            st.markdown("**⚙️ Filters:**")
+                        for j, value in enumerate(vs['values']):
+                            code_value = value['value'] if value['value'] else "No code specified"
+                            code_name = value.get('display_name', '')
+                            
+                            # Special handling for library items
+                            if value.get('is_library_item', False):
+                                code_data.append({
+                                    'EMIS Code': code_value,
+                                    'SNOMED Code': 'Library Item',
+                                    'Description': value['display_name'],
+                                    'Scope': '📚 Library',
+                                    'Is Refset': 'No'
+                                })
+                            else:
+                                # Handle refsets differently - they have direct SNOMED codes
+                                if value['is_refset']:
+                                    # For refsets: EMIS Code = SNOMED Code, Description from XML
+                                    snomed_code = code_value  # Refset codes are direct SNOMED codes
+                                    scope = '🎯 Refset'
+                                    # Use the valueset description as the code description for refsets
+                                    description = vs.get('description', code_name) if vs.get('description') != code_name else code_name
+                                else:
+                                    # Use batch lookup result or fallback for regular codes
+                                    snomed_code = snomed_lookup.get(str(code_value).strip(), 'Not found' if code_value != "No code specified" else 'N/A')
+                                    description = code_name
+                                    
+                                    if value['include_children']:
+                                        scope = '👥 + Children'
+                                    else:
+                                        scope = '🎯 Exact'
+                                
+                                code_data.append({
+                                    'EMIS Code': code_value,
+                                    'SNOMED Code': snomed_code,
+                                    'Description': description,
+                                    'Scope': scope,
+                                    'Is Refset': 'Yes' if value['is_refset'] else 'No'
+                                })
+                        
+                        if code_data:
+                            # Create and display dataframe
+                            codes_df = pd.DataFrame(code_data)
+                            
+                            st.dataframe(
+                                codes_df,
+                                width='stretch',
+                                hide_index=True,
+                                column_config={
+                                    "EMIS Code": st.column_config.TextColumn(
+                                        "🔍 EMIS Code",
+                                        width="medium"
+                                    ),
+                                    "SNOMED Code": st.column_config.TextColumn(
+                                        "🩺 SNOMED Code", 
+                                        width="medium"
+                                    ),
+                                    "Description": st.column_config.TextColumn(
+                                        "📝 Description",
+                                        width="large"
+                                    ),
+                                    "Scope": st.column_config.TextColumn(
+                                        "🔗 Scope",
+                                        width="small"
+                                    ),
+                                    "Is Refset": st.column_config.TextColumn(
+                                        "🎯 Refset",
+                                        width="small"
+                                    )
+                                }
+                            )
             
-            # Group filters by type to avoid duplicates
-            filter_groups = {}
-            for cf in main_column_filters:
-                column = cf.get('column', 'Unknown')
-                if column not in filter_groups:
-                    filter_groups[column] = []
-                filter_groups[column].append(cf)
+            # Column filters (age, date restrictions, etc.) with smart deduplication
+            # Filter out column filters that are used in linked criteria
+            main_column_filters = filter_linked_column_filters_from_main(criterion)
             
-            for column, filters in filter_groups.items():
-                # Handle both single column (string) and multiple columns (list)
-                if isinstance(column, list):
-                    # Multiple columns - combine for display
-                    column_names = column
-                    column_upper_list = [col.upper() for col in column_names]
-                    column_display = " + ".join(column_names)
-                else:
-                    # Single column - existing logic
-                    column_names = [column]
-                    column_upper_list = [column.upper()]
-                    column_display = column
+            if main_column_filters:
+                st.markdown("**⚙️ Filters:**")
                 
-                # Create detailed description based on column type and actual values
-                if any(col in ['READCODE', 'SNOMEDCODE'] for col in column_upper_list):
-                    # Count clinical codes for display
-                    total_clinical_codes = sum(len(vs.get('values', [])) for vs in clinical_value_sets)
-                    if total_clinical_codes > 0:
-                        st.caption(f"• Include {total_clinical_codes} specified clinical codes")
-                    else:
-                        st.caption("• Include specified clinical codes")
-                elif any(col in ['DRUGCODE'] for col in column_upper_list):
-                    # Count medication codes for display
-                    total_medication_codes = sum(len(vs.get('values', [])) for vs in clinical_value_sets)
-                    if total_medication_codes > 0:
-                        st.caption(f"• Include {total_medication_codes} specified medication codes")
-                    else:
-                        st.caption("• Include specified medication codes")
-                elif any(col == 'NUMERIC_VALUE' for col in column_upper_list):
-                    # Show detailed numeric value filter with actual values
-                    filter_desc = render_column_filter(filters[0])
-                    if filter_desc:
-                        st.caption(f"• {filter_desc}")
-                    else:
-                        st.caption("• Numeric value filtering")
-                elif any(col in ['DATE', 'ISSUE_DATE', 'AGE'] for col in column_upper_list):
-                    # Show detailed date/age filters with actual ranges
-                    filter_desc = render_column_filter(filters[0])
-                    if filter_desc:
-                        st.caption(f"• {filter_desc}")
-                    else:
-                        generic_desc = {
-                            'DATE': 'Date filtering',
-                            'ISSUE_DATE': 'Issue date filtering', 
-                            'AGE': 'Patient age filtering'
-                        }.get(column_upper_list[0], f'{column_display} filtering')
-                        st.caption(f"• {generic_desc}")
-                elif any(col in ['AUTHOR', 'CURRENTLY_CONTRACTED'] for col in column_upper_list):
-                    # EMISINTERNAL multi-column pattern for user authorization
-                    st.caption("• User authorization: Active users only")
-                else:
-                    # Use the existing render_column_filter function for other types
-                    filter_desc = render_column_filter(filters[0])
-                    if filter_desc:
-                        st.caption(f"• {filter_desc}")
-        
-        # Convert EMISINTERNAL codes to filter descriptions using display names
-        if emisinternal_value_sets:
-            st.markdown("**&nbsp;&nbsp;&nbsp;&nbsp;⚙️ Additional Filters:**")
-            for vs in emisinternal_value_sets:
-                vs_description = vs.get('description', '')
-                
-                # Use the value set description if available for context
-                if vs_description and vs_description.lower() not in ['', 'none']:
-                    filter_context = vs_description.lower()
-                else:
-                    filter_context = "internal classification"
-                
-                # Find the corresponding column filter to get the correct in_not_in value
-                column_filter_in_not_in = "IN"  # Default
+                # Group filters by type to avoid duplicates
+                filter_groups = {}
                 for cf in main_column_filters:
-                    cf_value_sets = cf.get('value_sets', [])
-                    for cf_vs in cf_value_sets:
-                        if cf_vs.get('id') == vs.get('id'):
-                            column_filter_in_not_in = cf.get('in_not_in', 'IN')
-                            break
+                    column = cf.get('column', 'Unknown')
+                    # Convert list to tuple for hashing if needed
+                    column_key = tuple(column) if isinstance(column, list) else column
+                    if column_key not in filter_groups:
+                        filter_groups[column_key] = []
+                    filter_groups[column_key].append(cf)
                 
-                for value in vs['values']:
-                    display_name = value.get('display_name', '')
-                    code_value = value.get('value', '')
+                for column_key, filters in filter_groups.items():
+                    # Convert tuple back to list if needed for processing
+                    column = list(column_key) if isinstance(column_key, tuple) else column_key
+                    # Handle both single column (string) and multiple columns (list)
+                    if isinstance(column, list):
+                        # Multiple columns - combine for display
+                        column_names = column
+                        column_upper_list = [col.upper() for col in column_names]
+                        column_display = " + ".join(column_names)
+                    else:
+                        # Single column - existing logic
+                        column_names = [column]
+                        column_upper_list = [column.upper()]
+                        column_display = column
                     
-                    # Determine action based on in_not_in value
-                    action = "Include" if column_filter_in_not_in == "IN" else "Exclude"
-                    
-                    # Use display name when available, fall back to code
-                    if display_name and display_name.strip():
-                        # Map common EMISINTERNAL codes to user-friendly descriptions
-                        if code_value.upper() == 'PROBLEM' and ('consultation' in filter_context or 'heading' in filter_context):
-                            st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {action} Consultations where the consultation heading is: {display_name}")
-                        elif code_value.upper() in ['COMPLICATION', 'ONGOING', 'RESOLVED']:
-                            status_descriptions = {
-                                'COMPLICATION': f"{action} complications only: {display_name}",
-                                'ONGOING': f"{action} ongoing conditions: {display_name}",
-                                'RESOLVED': f"{action} resolved conditions: {display_name}"
-                            }
-                            st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {status_descriptions.get(code_value.upper(), f'{action} {filter_context}: {display_name}')}")
+                    # Create detailed description based on column type and actual values
+                    if any(col in ['READCODE', 'SNOMEDCODE'] for col in column_upper_list):
+                        # Count clinical codes for display
+                        total_clinical_codes = sum(len(vs.get('values', [])) for vs in clinical_value_sets)
+                        if total_clinical_codes > 0:
+                            st.caption(f"• Include {total_clinical_codes} specified clinical codes")
                         else:
-                            st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {action} {filter_context}: {display_name}")
-                    elif code_value:
-                        st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {action} internal code: {code_value}")
+                            st.caption("• Include specified clinical codes")
+                    elif any(col in ['DRUGCODE'] for col in column_upper_list):
+                        # Count medication codes for display
+                        total_medication_codes = sum(len(vs.get('values', [])) for vs in clinical_value_sets)
+                        if total_medication_codes > 0:
+                            st.caption(f"• Include {total_medication_codes} specified medication codes")
+                        else:
+                            st.caption("• Include specified medication codes")
+                    elif any(col == 'NUMERIC_VALUE' for col in column_upper_list):
+                        # Show detailed numeric value filter with actual values
+                        filter_desc = render_column_filter(filters[0])
+                        if filter_desc:
+                            st.caption(f"• {filter_desc}")
+                        else:
+                            st.caption("• Numeric value filtering")
+                    elif any(col in ['DATE', 'ISSUE_DATE', 'AGE'] for col in column_upper_list):
+                        # Show detailed date/age filters with actual ranges
+                        filter_desc = render_column_filter(filters[0])
+                        if filter_desc:
+                            st.caption(f"• {filter_desc}")
+                        else:
+                            generic_desc = {
+                                'DATE': 'Date filtering',
+                                'ISSUE_DATE': 'Issue date filtering', 
+                                'AGE': 'Patient age filtering'
+                            }.get(column_upper_list[0], f'{column_display} filtering')
+                            st.caption(f"• {generic_desc}")
+                    elif any(col in ['AUTHOR', 'CURRENTLY_CONTRACTED'] for col in column_upper_list):
+                        # EMISINTERNAL multi-column pattern for user authorization
+                        st.caption("• User authorization: Active users only")
+                    else:
+                        # Use the existing render_column_filter function for other types
+                        filter_desc = render_column_filter(filters[0])
+                        if filter_desc:
+                            st.caption(f"• {filter_desc}")
+            
+            # Convert EMISINTERNAL codes to filter descriptions using display names
+            if emisinternal_value_sets:
+                st.markdown("**&nbsp;&nbsp;&nbsp;&nbsp;⚙️ Additional Filters:**")
+                for vs in emisinternal_value_sets:
+                    vs_description = vs.get('description', '')
+                    
+                    # Use the value set description if available for context
+                    if vs_description and vs_description.lower() not in ['', 'none']:
+                        filter_context = vs_description.lower()
+                    else:
+                        filter_context = "internal classification"
+                    
+                    # Find the corresponding column filter to get the correct in_not_in value
+                    column_filter_in_not_in = "IN"  # Default
+                    for cf in main_column_filters:
+                        cf_value_sets = cf.get('value_sets', [])
+                        for cf_vs in cf_value_sets:
+                            if cf_vs.get('id') == vs.get('id'):
+                                column_filter_in_not_in = cf.get('in_not_in', 'IN')
+                                break
+                    
+                    for value in vs['values']:
+                        display_name = value.get('display_name', '')
+                        code_value = value.get('value', '')
+                        
+                        # Determine action based on in_not_in value
+                        action = "Include" if column_filter_in_not_in == "IN" else "Exclude"
+                        
+                        # Use display name when available, fall back to code
+                        if display_name and display_name.strip():
+                            # Map common EMISINTERNAL codes to user-friendly descriptions
+                            if code_value.upper() == 'PROBLEM' and ('consultation' in filter_context or 'heading' in filter_context):
+                                st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {action} Consultations where the consultation heading is: {display_name}")
+                            elif code_value.upper() in ['COMPLICATION', 'ONGOING', 'RESOLVED']:
+                                status_descriptions = {
+                                    'COMPLICATION': f"{action} complications only: {display_name}",
+                                    'ONGOING': f"{action} ongoing conditions: {display_name}",
+                                    'RESOLVED': f"{action} resolved conditions: {display_name}"
+                                }
+                                st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {status_descriptions.get(code_value.upper(), f'{action} {filter_context}: {display_name}')}")
+                            else:
+                                st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {action} {filter_context}: {display_name}")
+                        elif code_value:
+                            st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {action} internal code: {code_value}")
                     else:
                         st.caption(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• {action} EMIS internal classification")
+            
+            # Restrictions (Latest 1, etc.)
+            if criterion.restrictions:
+                st.markdown("**🎯 Restrictions:**")
+                for restriction in criterion.restrictions:
+                    if restriction.type == "latest_records":
+                        icon = "📅" if "Latest" in restriction.description else "🔼"
+                        st.caption(f"{icon} {restriction.description}")
+                    else:
+                        st.caption(f"⚙️ {restriction.description}")
+                    
+                    # Show clinical codes in restrictions if they contain value sets
+                    if restriction.conditions:
+                        for condition in restriction.conditions:
+                            if condition.get('value_set_elements'):
+                                st.markdown("**🔍 Clinical Codes:**")
+                                # Parse and render the actual value set elements using existing logic
+                                for vs_elem in condition['value_set_elements']:
+                                    render_restriction_value_set_element(vs_elem)
+            
+            # Linked criteria (complex relationships)
+            render_linked_criteria(criterion, criterion)
         
-        # Restrictions (Latest 1, etc.)
-        if criterion.restrictions:
-            st.markdown("**🎯 Restrictions:**")
-            for restriction in criterion.restrictions:
-                if restriction.type == "latest_records":
-                    icon = "📅" if "Latest" in restriction.description else "🔼"
-                    st.caption(f"{icon} {restriction.description}")
-                else:
-                    st.caption(f"⚙️ {restriction.description}")
-                
-                # Show clinical codes in restrictions if they contain value sets
-                if restriction.conditions:
-                    for condition in restriction.conditions:
-                        if condition.get('value_set_elements'):
-                            st.markdown("**🔍 Clinical Codes:**")
-                            # Parse and render the actual value set elements using existing logic
-                            for vs_elem in condition['value_set_elements']:
-                                render_restriction_value_set_element(vs_elem)
-        
-        # Linked criteria (complex relationships)
-        render_linked_criteria(criterion, criterion)
+    except Exception as e:
+        import traceback
+        st.error(f"Error rendering criterion: {str(e)}")
+        with st.expander("Debug Information", expanded=False):
+            st.code(traceback.format_exc())
+        raise  # Re-raise to see the original error
 
 
 def render_column_filter(column_filter):
@@ -913,17 +942,37 @@ def render_column_filter(column_filter):
     
     # Handle range-based filters (numeric values, dates, etc.)
     if range_info:
-        if 'AGE' in column_check and range_info.get('from'):
-            age_value = range_info['from']['value']
-            operator = range_info['from']['operator']
-            unit = range_info['from']['unit']
+        if 'AGE' in column_check:
+            age_filters = []
             
-            op_text = format_operator_text(operator, is_numeric=True)
+            # Handle age range from
+            if range_info.get('from'):
+                age_value = range_info['from']['value']
+                operator = range_info['from']['operator']
+                unit = range_info['from']['unit']
+                
+                op_text = format_operator_text(operator, is_numeric=True)
+                
+                # Default to 'year' for AGE fields when unit is empty or missing
+                display_unit = unit if unit and unit.strip() else 'year'
+                unit_text = pluralize_unit(age_value, display_unit)
+                age_filters.append(f"{op_text} {age_value} {unit_text}")
             
-            # Default to 'year' for AGE fields when unit is empty or missing
-            display_unit = unit if unit and unit.strip() else 'year'
-            unit_text = pluralize_unit(age_value, display_unit)
-            return f"Age {op_text} {age_value} {unit_text}"
+            # Handle age range to
+            if range_info.get('to'):
+                age_value = range_info['to']['value']
+                operator = range_info['to']['operator']
+                unit = range_info['to']['unit']
+                
+                op_text = format_operator_text(operator, is_numeric=True)
+                
+                # Default to 'year' for AGE fields when unit is empty or missing
+                display_unit = unit if unit and unit.strip() else 'year'
+                unit_text = pluralize_unit(age_value, display_unit)
+                age_filters.append(f"{op_text} {age_value} {unit_text}")
+            
+            if age_filters:
+                return f"Age {' and '.join(age_filters)}"
         
         elif any(col in ['DATE', 'ISSUE_DATE', 'DOB', 'GMS_DATE_OF_REGISTRATION'] for col in column_check):
             date_filters = []

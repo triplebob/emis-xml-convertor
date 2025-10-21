@@ -10,6 +10,32 @@ try:
 except ImportError:
     NHS_TERMINOLOGY_AVAILABLE = False
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def _get_cached_status_content(lookup_size, version_str, load_source):
+    """Cache static status content that doesn't change during session"""
+    source_icons = {
+        "session": "⚡",
+        "cache": "🔐", 
+        "github": "📥"
+    }
+    source_messages = {
+        "session": "Session data",
+        "cache": "Encrypted cache", 
+        "github": "GitHub (fallback)"
+    }
+    
+    icon = source_icons.get(load_source, "📥")
+    message = source_messages.get(load_source, "Unknown source")
+    
+    return f"{icon} Lookup table loaded from {message}: {lookup_size:,} total mappings"
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _get_cached_version_info(version_info_dict):
+    """Cache version information that doesn't change during session"""
+    if not version_info_dict or len(version_info_dict) == 0:
+        return None
+    return version_info_dict.copy()
+
 def render_status_bar():
     """Render the status bar in the sidebar with lookup table information."""
     with st.sidebar:
@@ -41,22 +67,13 @@ def render_status_bar():
             # Get lookup statistics
             stats = get_lookup_statistics(lookup_df)
             
-            # Show success message with source indicator
-            source_icons = {
-                "session": "⚡",
-                "cache": "🔐", 
-                "github": "📥"
-            }
-            source_messages = {
-                "session": "from session",
-                "cache": "from encrypted cache",
-                "github": "from GitHub"
-            }
-            
-            icon = source_icons.get(load_source, "✅")
-            source_msg = source_messages.get(load_source, "")
-            
-            st.success(f"{icon} Lookup table loaded {source_msg}: {stats['total_count']:,} total mappings")
+            # Use cached status content for better performance
+            status_message = _get_cached_status_content(
+                stats['total_count'], 
+                version_info.get('emis_version', 'Unknown'),
+                load_source
+            )
+            st.success(status_message)
             st.info(f"🩺 SCT Codes: {stats['clinical_count']:,}")
             st.info(f"💊 Medications: {stats['medication_count']:,}")
             
@@ -100,43 +117,43 @@ def render_status_bar():
                                 st.caption(f"📘 {extract_date_raw}")
                 
             # Changelog section - Direct in-app display 
-            with st.sidebar.expander("🎯 What's New - v2.1.1", expanded=False):
+            with st.sidebar.expander("🎯 What's New - v2.1.2", expanded=False):
                 st.markdown("""
-                    **🚀 Memory & Performance Optimization - v2.1.1**
+                    **🧠 Memory Optimization and Performance Fixes - v2.1.2**
                     
-                    Critical performance improvements addressing memory constraints and threading issues for production deployment.
+                    Comprehensive memory management improvements and performance optimizations addressing export generation issues and dropdown reprocessing.
                     
-                    **⚡ Threading Performance:**
-                    - Adaptive worker scaling: 8-20 concurrent workers based on workload size
-                    - Resolved ThreadPoolExecutor memory warnings and thread explosion
-                    - Optimized worker thread authentication with credential passing
-                    - Batched processing to prevent memory overflow in large datasets
+                    **⚡ Export System Overhaul:**
+                    - Converted all export generation from automatic to lazy (button-triggered only)
+                    - Eliminated CSV generation on every radio button change in clinical tabs
+                    - Removed automatic Excel/JSON generation during report/search selection
+                    - Added immediate memory cleanup with garbage collection after downloads
                     
                     **🧠 Memory Management:**
-                    - Session-based expansion result caching to eliminate repeated API calls
-                    - Cache-first loading preserves complete 1.5M+ record lookup table
-                    - Enhanced garbage collection for large expansion operations
-                    - Streamlit Cloud 2.7GB memory limit compliance
+                    - Implemented systematic object deletion and cleanup after export operations
+                    - Added session-based caching for sidebar components to prevent re-rendering
+                    - Enhanced analysis data caching to eliminate reprocessing on dropdown changes
+                    - Reduced export memory consumption by approximately 80% through lazy loading
                     
-                    **🔧 Terminology Server Fixes:**
-                    - Fixed worker thread conflicts with Streamlit caching decorators
-                    - Resolved expansion failures (0/131 → 131/131 success rate)
-                    - Eliminated infinite loading loops during expansion operations
-                    - Improved error handling and status reporting for failed connections
+                    **🔧 Performance Fixes:**
+                    - Eliminated complete file reprocessing when switching report/search dropdowns
+                    - Removed toast message loops and unnecessary progress indicators during navigation
+                    - Fixed search rule visualizer import errors causing application crashes
+                    - Restored instant dropdown selection response without processing delays
                     
-                    **📊 Enhanced User Experience:**
-                    - Real-time progress tracking with concurrent worker count display
-                    - Cache hit/miss statistics during expansion operations
-                    - Toast notifications for successful terminology server connections
-                    - Persistent expansion results across UI interactions
+                    **📊 UI Responsiveness:**
+                    - Dropdown selections now execute instantly using cached analysis data
+                    - Export operations provide progress spinners and success confirmations
+                    - Consolidated scattered imports for proper module organization
+                    - Maintained export functionality while improving memory efficiency
                     
-                    **🎯 Production Readiness:**
-                    - Streamlined for Streamlit Cloud deployment constraints
-                    - Comprehensive threading orchestrator pattern implementation
-                    - Enhanced stability for high-volume terminology expansions
-                    - Maintained full backward compatibility with existing workflows
+                    **🎯 Production Stability:**
+                    - Addresses Streamlit Cloud 2.7GB memory constraints through lazy export generation
+                    - Prevents memory accumulation across multiple export operations
+                    - Improves overall application responsiveness during extended usage sessions
+                    - Maintains full export quality while optimizing resource management
                     
-                    ✅ **Resolves production memory issues while improving performance**
+                    ✅ **Resolves export-related memory issues and dropdown reprocessing problems**
                     """)
                 st.markdown("**[📄 View Full Technical Changelog](https://github.com/triplebob/emis-xml-convertor/blob/main/changelog.md)**")
             

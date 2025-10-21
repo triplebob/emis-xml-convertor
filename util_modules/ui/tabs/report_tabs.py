@@ -83,8 +83,12 @@ def render_list_reports_tab(xml_content: str, xml_filename: str):
     
     try:
         
-        # Use optimized cached analysis with defensive session state management
-        analysis = ensure_analysis_cached(xml_content)
+        # Use ONLY cached analysis data - never trigger reprocessing
+        analysis = st.session_state.get('search_analysis') or st.session_state.get('xml_structure_analysis')
+        if not analysis:
+            st.error("⚠️ Analysis data not available. Please ensure XML processing completed successfully.")
+            st.info("💡 Try refreshing the page or uploading your XML file again.")
+            return
         
         from ...core.report_classifier import ReportClassifier
         
@@ -639,49 +643,61 @@ def render_report_visualization(report, analysis):
         st.markdown(f"**Search Date:** {report.search_date}")
     
     with col2:
-        # Excel export functionality - no page refresh
-        try:
-            export_handler = ReportExportHandler(analysis)
-            filename, content = export_handler.generate_report_export(report)
-            st.download_button(
-                label="📥 Excel",
-                data=content,
-                file_name=filename,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                help=f"Download comprehensive {report_type.strip('[]').title()} Excel export with structure, filters, and clinical codes",
-                key=f"download_excel_{report.id}_{report_type}"
-            )
-        except Exception as e:
-            st.error(f"Excel export failed: {e}")
-            import traceback
-            with st.expander("Error Details", expanded=False):
-                st.code(traceback.format_exc())
+        # Excel export functionality - LAZY generation only when clicked
+        if st.button("📥 Excel", help=f"Generate comprehensive {report_type.strip('[]').title()} Excel export", key=f"excel_btn_{report.id}_{report_type}"):
+            try:
+                with st.spinner("Generating Excel export..."):
+                    export_handler = ReportExportHandler(analysis)
+                    filename, content = export_handler.generate_report_export(report)
+                    st.download_button(
+                        label="⬇️ Download Excel",
+                        data=content,
+                        file_name=filename,
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key=f"download_excel_{report.id}_{report_type}"
+                    )
+                    # Clear large content from memory immediately after download
+                    del content
+                    import gc
+                    gc.collect()
+                    st.success("✅ Excel export generated successfully")
+            except Exception as e:
+                st.error(f"Excel export failed: {e}")
+                import traceback
+                with st.expander("Error Details", expanded=False):
+                    st.code(traceback.format_exc())
     
     with col3:
-        # JSON export functionality - dynamic import to avoid circular dependencies
-        xml_filename = st.session_state.get('xml_filename', 'unknown.xml')
-        try:
-            # Dynamic import to avoid circular dependency
-            import importlib
-            json_module = importlib.import_module('util_modules.export_handlers.report_json_export_generator')
-            ReportJSONExportGenerator = json_module.ReportJSONExportGenerator
-            
-            json_generator = ReportJSONExportGenerator(analysis)
-            json_filename, json_content = json_generator.generate_report_json(report, xml_filename)
-            
-            st.download_button(
-                label="📥 JSON",
-                data=json_content,
-                file_name=json_filename,
-                mime="application/json",
-                help=f"Download {report_type.strip('[]').title()} structure as JSON for programmatic recreation",
-                key=f"download_json_{report.id}_{report_type}"
-            )
-        except Exception as e:
-            st.error(f"JSON export failed: {e}")
-            import traceback
-            with st.expander("Error Details", expanded=False):
-                st.code(traceback.format_exc())
+        # JSON export functionality - LAZY generation only when clicked
+        if st.button("📥 JSON", help=f"Generate {report_type.strip('[]').title()} structure as JSON", key=f"json_btn_{report.id}_{report_type}"):
+            xml_filename = st.session_state.get('xml_filename', 'unknown.xml')
+            try:
+                with st.spinner("Generating JSON export..."):
+                    # Dynamic import to avoid circular dependency
+                    import importlib
+                    json_module = importlib.import_module('util_modules.export_handlers.report_json_export_generator')
+                    ReportJSONExportGenerator = json_module.ReportJSONExportGenerator
+                    
+                    json_generator = ReportJSONExportGenerator(analysis)
+                    json_filename, json_content = json_generator.generate_report_json(report, xml_filename)
+                    
+                    st.download_button(
+                        label="⬇️ Download JSON",
+                        data=json_content,
+                        file_name=json_filename,
+                        mime="application/json",
+                        key=f"download_json_{report.id}_{report_type}"
+                    )
+                    # Clear large content from memory immediately after download
+                    del json_content
+                    import gc
+                    gc.collect()
+                    st.success("✅ JSON export generated successfully")
+            except Exception as e:
+                st.error(f"JSON export failed: {e}")
+                import traceback
+                with st.expander("Error Details", expanded=False):
+                    st.code(traceback.format_exc())
     
     # Type-specific visualization with proper type checking
     if hasattr(report, 'report_type'):

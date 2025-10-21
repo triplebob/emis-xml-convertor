@@ -347,59 +347,70 @@ def render_medications_tab(results):
                     )
             
             with col2:
-                # Filter data based on selection
-                filtered_df = df.copy()
-                
-                if export_filter == "Only Matched":
-                    # Filter for codes with successful mapping
-                    if 'Mapping Found' in filtered_df.columns:
-                        filtered_df = filtered_df[filtered_df['Mapping Found'] == 'Found']
-                elif export_filter == "Only Unmatched":
-                    # Filter for codes without successful mapping
-                    if 'Mapping Found' in filtered_df.columns:
-                        filtered_df = filtered_df[filtered_df['Mapping Found'] != 'Found']
-                elif export_filter == "Only Medications from Searches" and has_source_tracking:
-                    # Filter for search sources
-                    if 'Source Type' in filtered_df.columns:
-                        filtered_df = filtered_df[filtered_df['Source Type'].str.contains('Search', na=False)]
-                    elif 'source_type' in filtered_df.columns:
-                        filtered_df = filtered_df[filtered_df['source_type'] == 'search']
-                elif export_filter == "Only Medications from Reports" and has_source_tracking:
-                    # Filter for report sources 
-                    if 'Source Type' in filtered_df.columns:
-                        filtered_df = filtered_df[~filtered_df['Source Type'].str.contains('Search', na=False)]
-                    elif 'source_type' in filtered_df.columns:
-                        filtered_df = filtered_df[filtered_df['source_type'] == 'report']
-                
-                # Generate filename
-                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                xml_filename = getattr(st.session_state, 'xml_filename', 'unknown.xml')
-                
-                if export_filter == "Only Matched":
-                    filename = f"medications_matched_{xml_filename}_{timestamp}.csv"
-                elif export_filter == "Only Unmatched":
-                    filename = f"medications_unmatched_{xml_filename}_{timestamp}.csv"
-                elif export_filter == "Only Medications from Searches":
-                    filename = f"medications_searches_{xml_filename}_{timestamp}.csv"
-                elif export_filter == "Only Medications from Reports":
-                    filename = f"medications_reports_{xml_filename}_{timestamp}.csv"
-                else:
-                    filename = f"medications_all_{xml_filename}_{timestamp}.csv"
-                
-                # Create download
-                if not filtered_df.empty:
-                    csv_buffer = io.StringIO()
-                    filtered_df.to_csv(csv_buffer, index=False)
-                    
-                    st.download_button(
-                        label=f"📥 Download {export_filter}",
-                        data=csv_buffer.getvalue(),
-                        file_name=filename,
-                        mime="text/csv",
-                        key="medications_download"
-                    )
-                else:
-                    st.info(f"No data available for {export_filter}")
+                # LAZY CSV generation - only when button is clicked
+                if st.button(f"📥 Generate {export_filter}", help=f"Generate and download {export_filter.lower()}", key="medications_generate_btn"):
+                    try:
+                        with st.spinner(f"Generating {export_filter.lower()}..."):
+                            # Filter data based on selection
+                            filtered_df = df.copy()
+                            
+                            if export_filter == "Only Matched":
+                                # Filter for codes with successful mapping
+                                if 'Mapping Found' in filtered_df.columns:
+                                    filtered_df = filtered_df[filtered_df['Mapping Found'] == 'Found']
+                            elif export_filter == "Only Unmatched":
+                                # Filter for codes without successful mapping
+                                if 'Mapping Found' in filtered_df.columns:
+                                    filtered_df = filtered_df[filtered_df['Mapping Found'] != 'Found']
+                            elif export_filter == "Only Medications from Searches" and has_source_tracking:
+                                # Filter for search sources
+                                if 'Source Type' in filtered_df.columns:
+                                    filtered_df = filtered_df[filtered_df['Source Type'].str.contains('Search', na=False)]
+                                elif 'source_type' in filtered_df.columns:
+                                    filtered_df = filtered_df[filtered_df['source_type'] == 'search']
+                            elif export_filter == "Only Medications from Reports" and has_source_tracking:
+                                # Filter for report sources 
+                                if 'Source Type' in filtered_df.columns:
+                                    filtered_df = filtered_df[~filtered_df['Source Type'].str.contains('Search', na=False)]
+                                elif 'source_type' in filtered_df.columns:
+                                    filtered_df = filtered_df[filtered_df['source_type'] == 'report']
+                            
+                            # Generate filename
+                            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                            xml_filename = getattr(st.session_state, 'xml_filename', 'unknown.xml')
+                            
+                            if export_filter == "Only Matched":
+                                filename = f"medications_matched_{xml_filename}_{timestamp}.csv"
+                            elif export_filter == "Only Unmatched":
+                                filename = f"medications_unmatched_{xml_filename}_{timestamp}.csv"
+                            elif export_filter == "Only Medications from Searches":
+                                filename = f"medications_searches_{xml_filename}_{timestamp}.csv"
+                            elif export_filter == "Only Medications from Reports":
+                                filename = f"medications_reports_{xml_filename}_{timestamp}.csv"
+                            else:
+                                filename = f"medications_all_{xml_filename}_{timestamp}.csv"
+                            
+                            # Create download
+                            if not filtered_df.empty:
+                                csv_buffer = io.StringIO()
+                                filtered_df.to_csv(csv_buffer, index=False)
+                                
+                                st.download_button(
+                                    label=f"⬇️ Download {export_filter}",
+                                    data=csv_buffer.getvalue(),
+                                    file_name=filename,
+                                    mime="text/csv",
+                                    key="medications_download"
+                                )
+                                # Clear memory immediately after download
+                                del csv_buffer, filtered_df
+                                import gc
+                                gc.collect()
+                                st.success("✅ Medications export generated successfully")
+                            else:
+                                st.info(f"No data available for {export_filter}")
+                    except Exception as e:
+                        st.error(f"Export generation failed: {str(e)}")
         
         # Show pseudo-refset medications section if they exist
         if has_pseudo:
@@ -582,47 +593,58 @@ def render_refsets_tab(results):
                 export_filter = "All Refsets"
         
         with col2:
-            # Filter data based on selection
-            filtered_df = df.copy()
-            
-            if export_filter == "Only Refsets from Searches" and has_source_tracking:
-                # Filter for search sources
-                if 'Source Type' in filtered_df.columns:
-                    filtered_df = filtered_df[filtered_df['Source Type'].str.contains('Search', na=False)]
-                elif 'source_type' in filtered_df.columns:
-                    filtered_df = filtered_df[filtered_df['source_type'] == 'search']
-            elif export_filter == "Only Refsets from Reports" and has_source_tracking:
-                # Filter for report sources 
-                if 'Source Type' in filtered_df.columns:
-                    filtered_df = filtered_df[~filtered_df['Source Type'].str.contains('Search', na=False)]
-                elif 'source_type' in filtered_df.columns:
-                    filtered_df = filtered_df[filtered_df['source_type'] == 'report']
-            
-            # Generate filename
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            xml_filename = getattr(st.session_state, 'xml_filename', 'unknown.xml')
-            
-            if export_filter == "Only Refsets from Searches":
-                filename = f"refsets_searches_{xml_filename}_{timestamp}.csv"
-            elif export_filter == "Only Refsets from Reports":
-                filename = f"refsets_reports_{xml_filename}_{timestamp}.csv"
-            else:
-                filename = f"refsets_all_{xml_filename}_{timestamp}.csv"
-            
-            # Create download
-            if not filtered_df.empty:
-                csv_buffer = io.StringIO()
-                filtered_df.to_csv(csv_buffer, index=False)
-                
-                st.download_button(
-                    label=f"📥 Download {export_filter}",
-                    data=csv_buffer.getvalue(),
-                    file_name=filename,
-                    mime="text/csv",
-                    key="refsets_download"
-                )
-            else:
-                st.info(f"No data available for {export_filter}")
+            # LAZY CSV generation - only when button is clicked
+            if st.button(f"📥 Generate {export_filter}", help=f"Generate and download {export_filter.lower()}", key="refsets_generate_btn"):
+                try:
+                    with st.spinner(f"Generating {export_filter.lower()}..."):
+                        # Filter data based on selection
+                        filtered_df = df.copy()
+                        
+                        if export_filter == "Only Refsets from Searches" and has_source_tracking:
+                            # Filter for search sources
+                            if 'Source Type' in filtered_df.columns:
+                                filtered_df = filtered_df[filtered_df['Source Type'].str.contains('Search', na=False)]
+                            elif 'source_type' in filtered_df.columns:
+                                filtered_df = filtered_df[filtered_df['source_type'] == 'search']
+                        elif export_filter == "Only Refsets from Reports" and has_source_tracking:
+                            # Filter for report sources 
+                            if 'Source Type' in filtered_df.columns:
+                                filtered_df = filtered_df[~filtered_df['Source Type'].str.contains('Search', na=False)]
+                            elif 'source_type' in filtered_df.columns:
+                                filtered_df = filtered_df[filtered_df['source_type'] == 'report']
+                        
+                        # Generate filename
+                        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                        xml_filename = getattr(st.session_state, 'xml_filename', 'unknown.xml')
+                        
+                        if export_filter == "Only Refsets from Searches":
+                            filename = f"refsets_searches_{xml_filename}_{timestamp}.csv"
+                        elif export_filter == "Only Refsets from Reports":
+                            filename = f"refsets_reports_{xml_filename}_{timestamp}.csv"
+                        else:
+                            filename = f"refsets_all_{xml_filename}_{timestamp}.csv"
+                        
+                        # Create download
+                        if not filtered_df.empty:
+                            csv_buffer = io.StringIO()
+                            filtered_df.to_csv(csv_buffer, index=False)
+                            
+                            st.download_button(
+                                label=f"⬇️ Download {export_filter}",
+                                data=csv_buffer.getvalue(),
+                                file_name=filename,
+                                mime="text/csv",
+                                key="refsets_download"
+                            )
+                            # Clear memory immediately after download
+                            del csv_buffer, filtered_df
+                            import gc
+                            gc.collect()
+                            st.success("✅ Refsets export generated successfully")
+                        else:
+                            st.info(f"No data available for {export_filter}")
+                except Exception as e:
+                    st.error(f"Export generation failed: {str(e)}")
     else:
         st.info("No refsets found in this XML file")
 
@@ -780,47 +802,58 @@ def render_pseudo_refsets_tab(results):
                 export_filter = "All Pseudo-Refsets"
         
         with col2:
-            # Filter data based on selection
-            filtered_df = df.copy()
-            
-            if export_filter == "All Pseudo from Searches" and has_source_tracking:
-                # Filter for search sources
-                if 'Source Type' in filtered_df.columns:
-                    filtered_df = filtered_df[filtered_df['Source Type'].str.contains('Search', na=False)]
-                elif 'source_type' in filtered_df.columns:
-                    filtered_df = filtered_df[filtered_df['source_type'] == 'search']
-            elif export_filter == "All Pseudo from Reports" and has_source_tracking:
-                # Filter for report sources 
-                if 'Source Type' in filtered_df.columns:
-                    filtered_df = filtered_df[~filtered_df['Source Type'].str.contains('Search', na=False)]
-                elif 'source_type' in filtered_df.columns:
-                    filtered_df = filtered_df[filtered_df['source_type'] == 'report']
-            
-            # Generate filename
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            xml_filename = getattr(st.session_state, 'xml_filename', 'unknown.xml')
-            
-            if export_filter == "All Pseudo from Searches":
-                filename = f"pseudo_refsets_searches_{xml_filename}_{timestamp}.csv"
-            elif export_filter == "All Pseudo from Reports":
-                filename = f"pseudo_refsets_reports_{xml_filename}_{timestamp}.csv"
-            else:
-                filename = f"pseudo_refsets_all_{xml_filename}_{timestamp}.csv"
-            
-            # Create download
-            if not filtered_df.empty:
-                csv_buffer = io.StringIO()
-                filtered_df.to_csv(csv_buffer, index=False)
-                
-                st.download_button(
-                    label=f"📥 Download {export_filter}",
-                    data=csv_buffer.getvalue(),
-                    file_name=filename,
-                    mime="text/csv",
-                    key="pseudo_refsets_download"
-                )
-            else:
-                st.info(f"No data available for {export_filter}")
+            # LAZY CSV generation - only when button is clicked
+            if st.button(f"📥 Generate {export_filter}", help=f"Generate and download {export_filter.lower()}", key="pseudo_refsets_generate_btn"):
+                try:
+                    with st.spinner(f"Generating {export_filter.lower()}..."):
+                        # Filter data based on selection
+                        filtered_df = df.copy()
+                        
+                        if export_filter == "All Pseudo from Searches" and has_source_tracking:
+                            # Filter for search sources
+                            if 'Source Type' in filtered_df.columns:
+                                filtered_df = filtered_df[filtered_df['Source Type'].str.contains('Search', na=False)]
+                            elif 'source_type' in filtered_df.columns:
+                                filtered_df = filtered_df[filtered_df['source_type'] == 'search']
+                        elif export_filter == "All Pseudo from Reports" and has_source_tracking:
+                            # Filter for report sources 
+                            if 'Source Type' in filtered_df.columns:
+                                filtered_df = filtered_df[~filtered_df['Source Type'].str.contains('Search', na=False)]
+                            elif 'source_type' in filtered_df.columns:
+                                filtered_df = filtered_df[filtered_df['source_type'] == 'report']
+                        
+                        # Generate filename
+                        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                        xml_filename = getattr(st.session_state, 'xml_filename', 'unknown.xml')
+                        
+                        if export_filter == "All Pseudo from Searches":
+                            filename = f"pseudo_refsets_searches_{xml_filename}_{timestamp}.csv"
+                        elif export_filter == "All Pseudo from Reports":
+                            filename = f"pseudo_refsets_reports_{xml_filename}_{timestamp}.csv"
+                        else:
+                            filename = f"pseudo_refsets_all_{xml_filename}_{timestamp}.csv"
+                        
+                        # Create download
+                        if not filtered_df.empty:
+                            csv_buffer = io.StringIO()
+                            filtered_df.to_csv(csv_buffer, index=False)
+                            
+                            st.download_button(
+                                label=f"⬇️ Download {export_filter}",
+                                data=csv_buffer.getvalue(),
+                                file_name=filename,
+                                mime="text/csv",
+                                key="pseudo_refsets_download"
+                            )
+                            # Clear memory immediately after download
+                            del csv_buffer, filtered_df
+                            import gc
+                            gc.collect()
+                            st.success("✅ Pseudo-refsets export generated successfully")
+                        else:
+                            st.info(f"No data available for {export_filter}")
+                except Exception as e:
+                    st.error(f"Export generation failed: {str(e)}")
         
         # Remove the render_section_with_data call since we handled it above
         
@@ -971,59 +1004,70 @@ def render_pseudo_refset_members_tab(results):
             )
     
     with col2:
-        # Filter data based on selection
-        filtered_df = df.copy()
-        
-        if export_filter == "Only Matched":
-            # Filter for codes with successful mapping
-            if 'Mapping Found' in filtered_df.columns:
-                filtered_df = filtered_df[filtered_df['Mapping Found'] == 'Found']
-        elif export_filter == "Only Unmatched":
-            # Filter for codes without successful mapping
-            if 'Mapping Found' in filtered_df.columns:
-                filtered_df = filtered_df[filtered_df['Mapping Found'] != 'Found']
-        elif export_filter == "Only Pseudo-Members from Searches" and has_source_tracking:
-            # Filter for search sources
-            if 'Source Type' in filtered_df.columns:
-                filtered_df = filtered_df[filtered_df['Source Type'].str.contains('Search', na=False)]
-            elif 'source_type' in filtered_df.columns:
-                filtered_df = filtered_df[filtered_df['source_type'] == 'search']
-        elif export_filter == "Only Pseudo-Members from Reports" and has_source_tracking:
-            # Filter for report sources 
-            if 'Source Type' in filtered_df.columns:
-                filtered_df = filtered_df[~filtered_df['Source Type'].str.contains('Search', na=False)]
-            elif 'source_type' in filtered_df.columns:
-                filtered_df = filtered_df[filtered_df['source_type'] == 'report']
-        
-        # Generate filename
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        xml_filename = getattr(st.session_state, 'xml_filename', 'unknown.xml')
-        
-        if export_filter == "Only Matched":
-            filename = f"pseudo_members_matched_{xml_filename}_{timestamp}.csv"
-        elif export_filter == "Only Unmatched":
-            filename = f"pseudo_members_unmatched_{xml_filename}_{timestamp}.csv"
-        elif export_filter == "Only Pseudo-Members from Searches":
-            filename = f"pseudo_members_searches_{xml_filename}_{timestamp}.csv"
-        elif export_filter == "Only Pseudo-Members from Reports":
-            filename = f"pseudo_members_reports_{xml_filename}_{timestamp}.csv"
-        else:
-            filename = f"pseudo_members_all_{xml_filename}_{timestamp}.csv"
-        
-        # Create download
-        if not filtered_df.empty:
-            csv_buffer = io.StringIO()
-            filtered_df.to_csv(csv_buffer, index=False)
-            
-            st.download_button(
-                label=f"📥 Download {export_filter}",
-                data=csv_buffer.getvalue(),
-                file_name=filename,
-                mime="text/csv",
-                key="pseudo_members_download"
-            )
-        else:
-            st.info(f"No data available for {export_filter}")
+        # LAZY CSV generation - only when button is clicked
+        if st.button(f"📥 Generate {export_filter}", help=f"Generate and download {export_filter.lower()}", key="pseudo_members_generate_btn"):
+            try:
+                with st.spinner(f"Generating {export_filter.lower()}..."):
+                    # Filter data based on selection
+                    filtered_df = df.copy()
+                    
+                    if export_filter == "Only Matched":
+                        # Filter for codes with successful mapping
+                        if 'Mapping Found' in filtered_df.columns:
+                            filtered_df = filtered_df[filtered_df['Mapping Found'] == 'Found']
+                    elif export_filter == "Only Unmatched":
+                        # Filter for codes without successful mapping
+                        if 'Mapping Found' in filtered_df.columns:
+                            filtered_df = filtered_df[filtered_df['Mapping Found'] != 'Found']
+                    elif export_filter == "Only Pseudo-Members from Searches" and has_source_tracking:
+                        # Filter for search sources
+                        if 'Source Type' in filtered_df.columns:
+                            filtered_df = filtered_df[filtered_df['Source Type'].str.contains('Search', na=False)]
+                        elif 'source_type' in filtered_df.columns:
+                            filtered_df = filtered_df[filtered_df['source_type'] == 'search']
+                    elif export_filter == "Only Pseudo-Members from Reports" and has_source_tracking:
+                        # Filter for report sources 
+                        if 'Source Type' in filtered_df.columns:
+                            filtered_df = filtered_df[~filtered_df['Source Type'].str.contains('Search', na=False)]
+                        elif 'source_type' in filtered_df.columns:
+                            filtered_df = filtered_df[filtered_df['source_type'] == 'report']
+                    
+                    # Generate filename
+                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    xml_filename = getattr(st.session_state, 'xml_filename', 'unknown.xml')
+                    
+                    if export_filter == "Only Matched":
+                        filename = f"pseudo_members_matched_{xml_filename}_{timestamp}.csv"
+                    elif export_filter == "Only Unmatched":
+                        filename = f"pseudo_members_unmatched_{xml_filename}_{timestamp}.csv"
+                    elif export_filter == "Only Pseudo-Members from Searches":
+                        filename = f"pseudo_members_searches_{xml_filename}_{timestamp}.csv"
+                    elif export_filter == "Only Pseudo-Members from Reports":
+                        filename = f"pseudo_members_reports_{xml_filename}_{timestamp}.csv"
+                    else:
+                        filename = f"pseudo_members_all_{xml_filename}_{timestamp}.csv"
+                    
+                    # Create download
+                    if not filtered_df.empty:
+                        csv_buffer = io.StringIO()
+                        filtered_df.to_csv(csv_buffer, index=False)
+                        
+                        st.download_button(
+                            label=f"⬇️ Download {export_filter}",
+                            data=csv_buffer.getvalue(),
+                            file_name=filename,
+                            mime="text/csv",
+                            key="pseudo_members_download"
+                        )
+                        # Clear memory immediately after download
+                        del csv_buffer, filtered_df
+                        import gc
+                        gc.collect()
+                        st.success("✅ Pseudo-member codes export generated successfully")
+                    else:
+                        st.info(f"No data available for {export_filter}")
+            except Exception as e:
+                st.error(f"Export generation failed: {str(e)}")
     
     # Add helpful information about pseudo-refsets
     st.warning("""

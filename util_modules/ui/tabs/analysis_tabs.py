@@ -426,17 +426,27 @@ def render_detailed_rules_tab(analysis, xml_filename):
         st.markdown("---")
         st.markdown("**📊 Export Analysis**")
         
-        from ...analysis.search_rule_visualizer import generate_rule_analysis_report
-        
-        report_text, filename = generate_rule_analysis_report(analysis, xml_filename)
-        
-        st.download_button(
-            label="📥 Rule Analysis (TXT)",
-            data=report_text,
-            file_name=filename,
-            mime="text/plain",
-            help="Download detailed rule analysis as text file"
-        )
+        # LAZY export generation - only when button is clicked
+        if st.button("📥 Rule Analysis (TXT)", help="Generate detailed rule analysis as text file", key="rule_analysis_export"):
+            try:
+                with st.spinner("Generating rule analysis report..."):
+                    from ...analysis.search_rule_visualizer import generate_rule_analysis_report
+                    report_text, filename = generate_rule_analysis_report(analysis, xml_filename)
+                    
+                    st.download_button(
+                        label="⬇️ Download Rule Analysis",
+                        data=report_text,
+                        file_name=filename,
+                        mime="text/plain",
+                        key="rule_analysis_download"
+                    )
+                    # Clear large content from memory immediately after download
+                    del report_text
+                    import gc
+                    gc.collect()
+                    st.success("✅ Rule analysis report generated successfully")
+            except Exception as e:
+                st.error(f"Rule analysis export failed: {e}")
     
 
 
